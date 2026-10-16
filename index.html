@@ -406,38 +406,80 @@
   .p-card .who { font-size: 12px; color: var(--muted); letter-spacing: 0.08em; }
 
   /* ---------- 下载 ---------- */
-  .dl-grid { display: grid; grid-template-columns: minmax(0, 620px); justify-content: center; margin-top: 50px; }
+  .dl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); justify-content: center; gap: 16px; max-width: 920px; margin: 40px auto 0; }
   .dl-card {
-    position: relative; padding: 38px 34px; border-radius: 24px; overflow: hidden;
+    position: relative; padding: 24px 26px; border-radius: 20px; overflow: hidden;
     background: var(--card); border: 1px solid var(--line);
     transition: transform 0.3s, border-color 0.3s;
   }
   .dl-card:hover { transform: translateY(-4px); border-color: rgba(45, 212, 191, 0.4); }
   .dl-card.main { background: linear-gradient(150deg, rgba(167, 139, 250, 0.14), rgba(45, 212, 191, 0.08)), var(--card); }
-  .dl-card .os { font-size: 13px; letter-spacing: 0.2em; color: var(--muted); margin-bottom: 14px; }
-  .dl-card h4 { font-size: 24px; font-weight: 800; margin-bottom: 8px; }
-  .dl-card .ver { font-size: 12.5px; color: var(--muted); margin-bottom: 26px; }
+  .dl-card.android { background: linear-gradient(150deg, rgba(61, 220, 132, 0.13), rgba(45, 212, 191, 0.07)), var(--card); }
+  .dl-card.android:hover { border-color: rgba(61, 220, 132, 0.45); }
+  .dl-card.android .dl-os-ico { color: #7be8a6; background: rgba(61, 220, 132, 0.13); }
+  .dl-card.android .dl-head-t .os { color: #58db92; }
+  .dl-card.android .btn.primary { background: linear-gradient(120deg, #32d583, #22c55e); }
+  .dl-card .rec.new { background: linear-gradient(120deg, #32d583, #2dd4bf); }
+  .dl-alt { grid-column: 1 / -1; }
+  .dl-mirror { margin-top: 4px; text-align: center; font-size: 11px; line-height: 1.65; color: var(--muted); opacity: 0.8; }
+  .dl-mirror a { color: var(--accent2); text-decoration: none; border-bottom: 1px dashed rgba(45,212,191,0.5); }
+  .dl-mirror a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  .dl-head { display: flex; align-items: center; gap: 12px; margin-bottom: 15px; }
+  .dl-os-ico {
+    width: 42px; height: 42px; flex: none; border-radius: 11px; display: grid; place-items: center;
+    color: var(--fg); background: rgba(167, 139, 250, 0.14); border: 1px solid var(--line);
+  }
+  .dl-os-ico svg { width: 20px; height: 20px; }
+  .dl-head-t .os { font-size: 10.5px; font-weight: 700; letter-spacing: 0.22em; color: var(--accent2); margin-bottom: 4px; }
+  .dl-head-t h4 { font-size: 19px; font-weight: 800; margin: 0; }
+  .dl-meta { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 16px; }
+  .dl-meta .chip {
+    font-size: 11.5px; color: var(--muted); padding: 4px 11px; border-radius: 999px;
+    background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line);
+  }
+  .dl-main { width: 100%; justify-content: center; gap: 9px; padding: 12px 20px; font-size: 14.5px; font-weight: 800; }
+  .dl-main svg { width: 16px; height: 16px; transition: transform 0.25s; }
+  .dl-main:hover svg { transform: translateY(3px); }
+  .dl-note { display: flex; align-items: center; justify-content: center; gap: 7px; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .dl-note svg { width: 13px; height: 13px; flex: none; stroke: var(--accent2); }
+  .dl-tip { margin-top: 4px; text-align: center; font-size: 11px; line-height: 1.65; color: var(--muted); opacity: 0.65; }
   .dl-card .rec {
-    position: absolute; top: 24px; right: 24px;
+    position: absolute; top: 18px; right: 18px;
     font-size: 10.5px; letter-spacing: 0.14em; padding: 5px 12px; border-radius: 999px;
     background: var(--grad); color: #0a0a0c; font-weight: 700;
   }
-  .steps { margin-top: 60px; }
-  .steps ol { list-style: none; counter-reset: s; display: grid; gap: 14px; max-width: 640px; }
-  .steps li {
-    counter-increment: s; position: relative; padding: 18px 22px 18px 64px;
-    border-radius: 16px; background: var(--card); border: 1px solid var(--line);
-    font-size: 14px; color: var(--muted); line-height: 1.8;
+  .steps { margin-top: 40px; }
+  .steps h3 { font-size: 14.5px; font-weight: 700; margin-bottom: 30px; text-align: center; }
+  .steps ol {
+    list-style: none; position: relative;
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px;
+    max-width: 920px; margin: 0 auto;
   }
-  .steps li::before {
-    content: counter(s); position: absolute; left: 18px; top: 50%; transform: translateY(-50%);
-    width: 30px; height: 30px; border-radius: 10px; display: grid; place-items: center;
-    background: linear-gradient(135deg, rgba(167, 139, 250, 0.2), rgba(45, 212, 191, 0.16));
-    font-weight: 800; font-size: 13px; color: var(--fg);
+  /* 桌面：图标之间一条渐变虚线串联，表达安装顺序 */
+  .steps ol::before {
+    content: ""; position: absolute; z-index: 0;
+    top: 24px; left: 12.5%; right: 12.5%; height: 1px;
+    background: repeating-linear-gradient(90deg, rgba(167, 139, 250, 0.45) 0 6px, transparent 6px 13px);
   }
+  .steps li { position: relative; z-index: 1; text-align: center; }
+  .st-ico {
+    width: 48px; height: 48px; margin: 0 auto 13px; border-radius: 14px;
+    display: grid; place-items: center;
+    color: var(--accent2);
+    background: linear-gradient(150deg, rgba(167, 139, 250, 0.20), rgba(45, 212, 191, 0.12)), #0c0d13;
+    border: 1px solid var(--line);
+    transition: transform 0.25s, border-color 0.25s, box-shadow 0.25s;
+  }
+  .st-ico svg { width: 22px; height: 22px; }
+  .steps li:hover .st-ico {
+    transform: translateY(-3px); border-color: rgba(45, 212, 191, 0.45);
+    box-shadow: 0 10px 26px rgba(45, 212, 191, 0.16);
+  }
+  .st-t { display: block; font-size: 13.5px; font-weight: 700; color: var(--fg); margin-bottom: 6px; }
+  .st-d { display: block; font-size: 12px; color: var(--muted); line-height: 1.75; }
   .steps code {
-    font-family: "Cascadia Code", Consolas, monospace; font-size: 12.5px;
-    background: rgba(167, 139, 250, 0.12); padding: 2px 8px; border-radius: 6px; color: var(--accent);
+    font-family: "Cascadia Code", Consolas, monospace; font-size: 11px;
+    background: rgba(167, 139, 250, 0.12); padding: 2px 6px; border-radius: 5px; color: var(--accent);
   }
 
   /* ---------- 打赏 ---------- */
@@ -454,6 +496,54 @@
   .plat .sw { width: 10px; height: 10px; border-radius: 3px; }
   .sw-wx { background: #07c160; }
   .sw-ali { background: #1677ff; }
+
+  /* ---------- 下载备用通道（卡片外独立区块） ---------- */
+  .dl-alt { text-align: center; }
+  .dl-alt-t { display: block; text-align: center; font-size: 11.5px; letter-spacing: 0.04em; color: var(--muted); opacity: 0.75; margin-bottom: 9px; }
+  .dl-alt-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .dl-alt-link {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px; border-radius: 12px;
+    background: rgba(255, 255, 255, 0.03); border: 1px solid var(--line);
+    color: var(--fg); font-size: 12.5px; text-decoration: none;
+    transition: border-color 0.2s, background 0.2s, transform 0.2s;
+  }
+  .dl-alt-link:hover { transform: translateY(-1px); border-color: rgba(45, 212, 191, 0.35); background: rgba(45, 212, 191, 0.06); }
+  .dl-alt-link .dl-alt-name { font-weight: 600; white-space: nowrap; }
+  .dl-alt-link .dl-alt-extra {
+    margin-left: auto; display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11px; color: var(--muted); white-space: nowrap;
+  }
+  .dl-alt-link .dl-alt-extra code {
+    font-family: "Cascadia Code", Consolas, monospace; font-size: 11px; letter-spacing: 0.08em;
+    background: rgba(167, 139, 250, 0.14); color: var(--accent); padding: 1px 6px; border-radius: 5px;
+  }
+  .dl-alt-link svg { width: 13px; height: 13px; flex: none; stroke: var(--muted); transition: stroke 0.2s; }
+  .dl-alt-link:hover svg { stroke: var(--accent2); }
+
+  /* ---------- 版权与免责声明 ---------- */
+  .legal { text-align: center; }
+  .legal-grid {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px;
+    margin-top: 46px; text-align: left;
+  }
+  .legal-item {
+    padding: 26px 26px 24px; border-radius: var(--radius);
+    background: var(--card); border: 1px solid var(--line);
+    transition: background 0.3s, border-color 0.3s;
+  }
+  .legal-item:hover { background: var(--card-hover); border-color: rgba(167, 139, 250, 0.28); }
+  .legal-item h4 {
+    font-size: 15px; font-weight: 700; margin-bottom: 11px;
+    display: flex; align-items: center; gap: 9px;
+  }
+  .legal-item h4::before {
+    content: ""; width: 4px; height: 15px; border-radius: 2px;
+    background: var(--grad); flex-shrink: 0;
+  }
+  .legal-item p { font-size: 13px; color: var(--muted); line-height: 1.95; }
+  .legal-contact { margin-top: 32px; font-size: 12.5px; color: var(--muted); }
+  .legal-contact a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
 
   /* ---------- 页脚 ---------- */
   footer {
@@ -474,7 +564,24 @@
     .grid-cards { grid-template-columns: 1fr; }
     .gal-grid { grid-template-columns: 1fr; }
     .dl-grid { grid-template-columns: 1fr; }
+    .dl-card { padding: 22px 18px 20px; }
+    .dl-alt-row { grid-template-columns: 1fr; }
+    .legal-grid { grid-template-columns: 1fr; }
     .nav-links .hide-m { display: none; }
+    /* 安装步骤：平板 2×2，去掉横向连接线 */
+    .steps ol { grid-template-columns: repeat(2, 1fr); gap: 28px 20px; }
+    .steps ol::before { display: none; }
+  }
+  @media (max-width: 560px) {
+    /* 手机：单列时间线，图标在左、文案在右，左侧竖线串联 */
+    .steps h3 { margin-bottom: 22px; }
+    .steps ol { grid-template-columns: 1fr; gap: 0; max-width: 420px; }
+    .steps ol::before {
+      display: block; top: 12px; bottom: 12px; left: 23px; right: auto; width: 1px; height: auto;
+      background: repeating-linear-gradient(180deg, rgba(167, 139, 250, 0.45) 0 6px, transparent 6px 13px);
+    }
+    .steps li { display: flex; align-items: flex-start; gap: 14px; text-align: left; padding: 10px 0; }
+    .st-ico { width: 46px; height: 46px; margin: 0; flex: none; }
   }
 </style>
 </head>
@@ -540,7 +647,7 @@
     </div>
     <div class="hero-note reveal">双音源 · 扫码登录 · 歌单同步 · 银河视觉</div>
     <div class="hero-shot reveal">
-      <img src="shots/home.png" alt="律动 RhythmViz 主界面">
+      <img src="shots/home.png" alt="律动 RhythmViz 主界面" fetchpriority="high" decoding="async">
     </div>
   </section>
 
@@ -565,7 +672,7 @@
         <div class="feat-tags"><span>双源并发</span><span>结果分组</span><span>回车即播</span></div>
       </div>
       <div class="feat-shot">
-        <img src="shots/search.png" alt="聚合搜索">
+        <img src="shots/search.png" alt="聚合搜索" loading="lazy" decoding="async">
       </div>
     </div>
 
@@ -576,7 +683,7 @@
         <div class="feat-tags"><span>官方 OAuth 流程</span><span>本地存储凭证</span><span>昵称头像回显</span></div>
       </div>
       <div class="feat-shot" style="display: grid; place-items: center; padding: 26px 0; background: #08080c;">
-        <img src="shots/qrcode.png" alt="扫码登录" style="width: auto; max-width: 72%; border-radius: 14px; border: 1px solid var(--line);">
+        <img src="shots/qrcode.png" alt="扫码登录" loading="lazy" decoding="async" style="width: auto; max-width: 72%; border-radius: 14px; border: 1px solid var(--line);">
       </div>
     </div>
 
@@ -587,7 +694,7 @@
         <div class="feat-tags"><span>歌单云同步</span><span>单平台过滤</span><span>两行紧凑视图</span></div>
       </div>
       <div class="feat-shot">
-        <img src="shots/playlist.png" alt="我的歌单">
+        <img src="shots/playlist.png" alt="我的歌单" loading="lazy" decoding="async">
       </div>
     </div>
 
@@ -598,7 +705,7 @@
         <div class="feat-tags"><span>文件夹批量导入</span><span>封面 · 元数据解析</span><span>我的歌单置顶</span></div>
       </div>
       <div class="feat-shot">
-        <img src="shots/mypl-local.png" alt="本地曲库导入">
+        <img src="shots/mypl-local.png" alt="本地曲库导入" loading="lazy" decoding="async">
       </div>
     </div>
   </section>
@@ -609,7 +716,7 @@
     <h2 class="sec-title reveal">开屏三秒，<br>也值得认真做。</h2>
     <p class="sec-sub reveal" style="margin-bottom: 50px;">银河启动特效：星光汇聚成字，辉光沿字序呼吸明灭，一道流光周期性扫过品牌名。九种预设主题色板，虹彩起点随你选的颜色展开。</p>
     <div class="feat-shot reveal" style="border-radius: 24px;">
-      <img src="shots/splash.png" alt="银河启动特效">
+      <img src="shots/splash.png" alt="银河启动特效" loading="lazy" decoding="async">
     </div>
 
     <div class="gal-head reveal">
@@ -689,32 +796,123 @@
   <!-- ================= 下载 ================= -->
   <section id="download">
     <span class="kicker reveal">DOWNLOAD · 免费下载</span>
-    <h2 class="sec-title reveal">选择你的入口。</h2>
-    <p class="sec-sub reveal">免登录高速下载，解压即用。</p>
+    <h2 class="sec-title reveal">点击，直接下载。</h2>
+    <p class="sec-sub reveal">安装包直链，点下去就开始下载——免登录、免跳转、无捆绑。</p>
 
     <div class="dl-grid reveal">
       <div class="dl-card main">
         <span class="rec">● 推荐</span>
-        <div class="os">WINDOWS</div>
-        <h4>Windows 10 / 11</h4>
-        <div class="ver">安装版 · v1.0.0 · 约 87 MB · EXE</div>
-        <a href="https://wwavc.lanzoue.com/iSV5w4c780yb" class="btn primary">⚡ 高速下载（蓝奏云）↓</a>
-        <div style="margin-top: 12px; font-size: 13px; color: var(--muted);">打开页面后输入提取码 <b style="color: var(--accent2); letter-spacing: 0.1em;">i86k</b> 即可下载，国内满速免登录</div>
-        <div style="margin-top: 14px; font-size: 12.5px; color: var(--muted); display: flex; gap: 18px; justify-content: center;">
-          <a href="https://github.com/xinxin2344/rhythmviz/releases/download/v1.0.0/RhythmViz-Setup-1.0.0.exe" style="text-decoration: underline;">GitHub 直连</a>
-          <a href="https://ghproxy.net/https://github.com/xinxin2344/rhythmviz/releases/download/v1.0.0/RhythmViz-Setup-1.0.0.exe" style="text-decoration: underline;">备用加速线</a>
+
+        <div class="dl-head">
+          <div class="dl-os-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.4 10.4 4.3v7.2H3V5.4z"/><path d="M11.4 4.2 21 2.9v8.6h-9.6V4.2z"/><path d="M3 12.5h7.4v7.2L3 18.6v-6.1z"/><path d="M11.4 12.5H21v8.6l-9.6-1.3v-7.3z"/></svg>
+          </div>
+          <div class="dl-head-t">
+            <div class="os">WINDOWS</div>
+            <h4>Windows 10 / 11</h4>
+          </div>
+        </div>
+
+        <div class="dl-meta">
+          <span class="chip">v1.0.0 正式版</span>
+          <span class="chip">约 87 MB</span>
+          <span class="chip">EXE 安装包</span>
+        </div>
+
+        <a href="download/RhythmViz-Setup-1.0.0.exe" download class="btn primary dl-main">
+          <span>下载 RhythmViz v1.0.0</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/></svg>
+        </a>
+        <div class="dl-note">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5"/></svg>
+          国内 CDN 直链 · 点击即下 · 支持断点续传
+        </div>
+        <div class="dl-tip">备用线路：<a href="https://github.com/xinxin2344/rhythmviz/releases/download/v1.0.0/RhythmViz-Setup-1.0.0.exe" target="_blank" rel="noopener">GitHub 直链</a> · <a href="https://wwavc.lanzoue.com/iSV5w4c780yb" target="_blank" rel="noopener">蓝奏云（提取码 i86k）</a></div>
+      </div>
+
+      <div class="dl-card android">
+        <span class="rec new">NEW</span>
+
+        <div class="dl-head">
+          <div class="dl-os-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.6 9.48l1.84-3.18c.16-.31.04-.69-.26-.85-.29-.15-.65-.06-.83.22l-1.88 3.24c-2.86-1.21-6.08-1.21-8.94 0L5.65 5.67c-.19-.29-.58-.38-.87-.2-.28.18-.37.54-.22.83L6.4 9.48C3.3 11.25 1.28 14.44 1 18h22c-.28-3.56-2.3-6.75-5.4-8.52zM7 15.25a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5zm10 0a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5z"/></svg>
+          </div>
+          <div class="dl-head-t">
+            <div class="os">ANDROID</div>
+            <h4>Android 5.1 及以上</h4>
+          </div>
+        </div>
+
+        <div class="dl-meta">
+          <span class="chip">v1.1.0 正式版</span>
+          <span class="chip">约 7 MB</span>
+          <span class="chip">APK 直装包</span>
+        </div>
+
+        <a href="download/RhythmViz-1.1.0.apk" download class="btn primary dl-main">
+          <span>下载 Android 版 APK</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/></svg>
+        </a>
+        <div class="dl-note">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5"/></svg>
+          网易云式竖屏布局 · 返回键逐级返回 · QQ 一键登录
+        </div>
+        <div class="dl-mirror">国内 CDN 直链，下载更快；备用线路：<a href="https://github.com/xinxin2344/rhythmviz/releases/download/v1.1.0/RhythmViz-1.1.0.apk" target="_blank" rel="noopener">GitHub</a> · <a href="https://ghproxy.net/https://github.com/xinxin2344/rhythmviz/releases/download/v1.1.0/RhythmViz-1.1.0.apk" target="_blank" rel="noopener">GitHub 加速镜像</a>（安装时允许「未知来源」；QQ 音乐支持本机 QQ 一键授权，网易云仍需扫码）</div>
+      </div>
+
+      <div class="dl-alt">
+        <span class="dl-alt-t">直连速度不理想？试试备用通道</span>
+        <div class="dl-alt-row">
+          <a class="dl-alt-link" href="https://wwavc.lanzoue.com/iSV5w4c780yb" target="_blank" rel="noopener">
+            <span class="dl-alt-name">蓝奏云网盘</span>
+            <span class="dl-alt-extra">提取码 <code>i86k</code></span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7"/><path d="M8.5 7H17v8.5"/></svg>
+          </a>
+          <a class="dl-alt-link" href="https://ghproxy.net/https://github.com/xinxin2344/rhythmviz/releases/download/v1.0.0/RhythmViz-Setup-1.0.0.exe" target="_blank" rel="noopener">
+            <span class="dl-alt-name">国内加速镜像</span>
+            <span class="dl-alt-extra">GitHub 加速线</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7"/><path d="M8.5 7H17v8.5"/></svg>
+          </a>
         </div>
       </div>
     </div>
 
     <div class="steps reveal">
-      <h3 style="font-size: 17px; font-weight: 700; margin-bottom: 22px;">安装前必看</h3>
+      <h3>Windows 四步上手</h3>
       <ol>
-        <li>下载 <code>RhythmViz-Setup-1.0.0.exe</code>，双击运行安装向导。</li>
-        <li>安装时可在组件页勾选需要的音源插件（QQ 音乐 / 网易云），默认全选。</li>
-        <li>首次打开后点右上角「登录」，用 QQ 音乐或网易云 App 扫码即可同步歌单。</li>
-        <li>若系统提示未知发布者，选择「仍要运行」即可——应用完全免费无捆绑。</li>
+        <li>
+          <span class="st-ico">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/></svg>
+          </span>
+          <span class="st-t">下载并运行</span>
+          <span class="st-d">下载 <code>RhythmViz-Setup-1.0.0.exe</code>，双击启动安装向导</span>
+        </li>
+        <li>
+          <span class="st-ico">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8.5 12.2l2.3 2.3 4.7-5"/></svg>
+          </span>
+          <span class="st-t">勾选音源</span>
+          <span class="st-d">组件页按需勾选 QQ 音乐 / 网易云，默认全选</span>
+        </li>
+        <li>
+          <span class="st-ico">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h6v6H4z"/><path d="M14 4h6v6h-6z"/><path d="M4 14h6v6H4z"/><path d="M14 14h2.5v2.5H14z"/><path d="M17.5 17.5H20V20h-2.5z"/></svg>
+          </span>
+          <span class="st-t">扫码登录</span>
+          <span class="st-d">首次打开点右上角「登录」，App 扫码自动同步歌单</span>
+        </li>
+        <li>
+          <span class="st-ico">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.6-3 7.6-7 9-4-1.4-7-4.4-7-9V6z"/><path d="M9 11.8l2.2 2.2L15.5 9.5"/></svg>
+          </span>
+          <span class="st-t">安全放行</span>
+          <span class="st-d">提示未知发布者时选「仍要运行」，免费无捆绑</span>
+        </li>
       </ol>
+      <p style="margin: 26px auto 0; max-width: 680px; text-align: center; font-size: 12.5px; line-height: 1.8; color: var(--muted);">
+        <span style="color: #58db92; font-weight: 700; letter-spacing: 0.08em;">ANDROID 用户：</span>
+        手机浏览器直接下载 APK 并安装（首次安装需在系统设置中允许「安装未知应用」），音源已内置、打开即用，无需勾选组件；QQ 音乐登录在登录页点「QQ 一键登录」即可唤起本机 QQ 授权，网易云登录仍需用<strong style="color: var(--fg);">另一台设备</strong>扫描手机屏幕上的二维码。
+      </p>
     </div>
   </section>
 
@@ -725,14 +923,46 @@
     <p class="sec-sub reveal" style="margin: 0 auto;">RhythmViz 完全免费、无广告、无捆绑。如果它让你的桌面多一点律动，欢迎投喂——这是支持持续开发的全部方式。</p>
     <div class="donate-grid reveal">
       <div class="donate-card">
-        <img src="shots/donate-wechat.png" alt="微信打赏收款码">
+        <img src="shots/donate-wechat.png" alt="微信打赏收款码" loading="lazy" decoding="async">
         <div class="plat"><span class="sw sw-wx"></span>微信打赏</div>
       </div>
       <div class="donate-card">
-        <img src="shots/donate-alipay.jpg" alt="支付宝打赏收款码">
+        <img src="shots/donate-alipay.jpg" alt="支付宝打赏收款码" loading="lazy" decoding="async">
         <div class="plat"><span class="sw sw-ali"></span>支付宝打赏</div>
       </div>
+      <div class="donate-card">
+        <img src="shots/wechat-mp.jpg" alt="微信公众号二维码" loading="lazy" decoding="async">
+        <div class="plat"><span class="sw sw-wx"></span>关注公众号 · 获取更新</div>
+      </div>
     </div>
+  </section>
+
+  <!-- ================= 版权与免责声明 ================= -->
+  <section id="legal" class="legal">
+    <span class="kicker reveal">LEGAL · 版权与免责声明</span>
+    <h2 class="sec-title reveal">关于版权与音源。</h2>
+    <p class="sec-sub reveal" style="margin: 0 auto;">为避免误解，请在使用前阅读以下说明。</p>
+
+    <div class="legal-grid reveal">
+      <div class="legal-item">
+        <h4>音源归属</h4>
+        <p>RhythmViz 的音乐内容来自 QQ 音乐、网易云音乐等第三方音乐平台。所有音频、歌词、封面及艺人信息，其著作权与相关权利均归原始权利人（唱片公司、词曲作者、表演者及相应平台）所有，本软件不主张任何权利。</p>
+      </div>
+      <div class="legal-item">
+        <h4>软件定位</h4>
+        <p>RhythmViz 是一款本地音乐播放器与音频可视化工具，仅提供搜索结果的聚合展示与播放控制。软件不存储、不托管、不分发任何音频文件，也不提供下载音乐的功能——所有音频均由第三方平台在播放时提供。</p>
+      </div>
+      <div class="legal-item">
+        <h4>使用范围</h4>
+        <p>本软件完全免费，仅供个人学习、研究与技术交流使用，不得用于任何商业用途。请通过官方渠道获取音乐授权。因使用本软件产生的任何法律后果，由使用者自行承担。</p>
+      </div>
+      <div class="legal-item">
+        <h4>权利通知</h4>
+        <p>本软件与腾讯音乐娱乐集团、网易公司及其关联公司无任何隶属或合作关系。若权利人认为本软件相关内容侵犯其合法权益，请通过下方渠道联系，我们将在核实后及时处理或移除。</p>
+      </div>
+    </div>
+
+    <p class="legal-contact reveal">权利通知与侵权投诉，请通过 GitHub 仓库提交 Issue：<a href="https://github.com/xinxin2344/rhythmviz/issues" target="_blank" rel="noopener">github.com/xinxin2344/rhythmviz/issues</a></p>
   </section>
 </main>
 
@@ -743,6 +973,7 @@
     <a href="#features">功能</a>
     <a href="#download">下载</a>
     <a href="#donate">打赏</a>
+    <a href="#legal">版权声明</a>
     <a href="#top">回到顶部 ↑</a>
   </div>
 </footer>
