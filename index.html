@@ -440,6 +440,21 @@
     background: rgba(167, 139, 250, 0.12); padding: 2px 8px; border-radius: 6px; color: var(--accent);
   }
 
+  /* ---------- 打赏 ---------- */
+  .donate-grid { display: flex; gap: 22px; justify-content: center; margin-top: 46px; flex-wrap: wrap; }
+  .donate-card {
+    width: 236px; padding: 16px 16px 14px; border-radius: var(--radius);
+    background: #fff; text-align: center;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: transform 0.35s cubic-bezier(0.2, 0.7, 0.3, 1), box-shadow 0.35s;
+  }
+  .donate-card:hover { transform: translateY(-6px); box-shadow: 0 26px 60px rgba(0, 0, 0, 0.45), 0 0 50px rgba(167, 139, 250, 0.14); }
+  .donate-card img { width: 100%; border-radius: 12px; }
+  .donate-card .plat { margin-top: 13px; font-size: 13.5px; font-weight: 700; color: #141418; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .plat .sw { width: 10px; height: 10px; border-radius: 3px; }
+  .sw-wx { background: #07c160; }
+  .sw-ali { background: #1677ff; }
+
   /* ---------- 页脚 ---------- */
   footer {
     position: relative; z-index: 1;
@@ -698,6 +713,22 @@
     </div>
   </section>
 
+  <!-- ================= 打赏 ================= -->
+  <section id="donate" style="text-align: center;">
+    <span class="kicker reveal">DONATE · 打赏支持</span>
+    <h2 class="sec-title reveal">请作者喝杯咖啡。</h2>
+    <p class="sec-sub reveal" style="margin: 0 auto;">RhythmViz 完全免费、无广告、无捆绑。如果它让你的桌面多一点律动，欢迎投喂——这是支持持续开发的全部方式。</p>
+    <div class="donate-grid reveal">
+      <div class="donate-card">
+        <img src="shots/donate-wechat.png" alt="微信打赏收款码">
+        <div class="plat"><span class="sw sw-wx"></span>微信打赏</div>
+      </div>
+      <div class="donate-card">
+        <img src="shots/donate-alipay.jpg" alt="支付宝打赏收款码">
+        <div class="plat"><span class="sw sw-ali"></span>支付宝打赏</div>
+      </div>
+    </div>
+  </section>
 </main>
 
 <!-- ================= 页脚 ================= -->
@@ -706,6 +737,7 @@
   <div class="f-links">
     <a href="#features">功能</a>
     <a href="#download">下载</a>
+    <a href="#donate">打赏</a>
     <a href="#top">回到顶部 ↑</a>
   </div>
 </footer>
