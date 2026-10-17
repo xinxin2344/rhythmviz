@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https: http:; media-src 'self' blob: https: http:; connect-src 'self' https: http:; font-src 'self' https://fonts.gstatic.com" />
+  <title>律动 RhythmViz</title>
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body class="home-active">
+  <!-- 可视化舞台 -->
+  <canvas id="stage"></canvas>
+
+  <!-- 舞台返回：非主页且非播放页/歌词MV/歌单拼图时显示 -->
+  <button id="btnStageBack" class="np-back hidden" title="返回主页 (Esc)">‹ 返回</button>
+
+  <!-- 自定义背景层（用户选图 / 预设渐变） -->
+  <div id="userBg"></div>
+
+  <!-- 封面模糊色晕层（汽水音乐式氛围背景） -->
+  <div id="albumBg"></div>
+
+  <!-- 边缘暗角：让 UI 与画面融合 -->
+  <div id="vignette"></div>
+
+  <!-- 舞台歌词：屏幕侧边竖排堆叠的悬浮歌词列（tilt 层负责倾斜，stack 由 JS 驱动平滑上滚） -->
+  <div id="stageLyric">
+    <div id="stageLyricTilt">
+      <div id="stageLyricStack"></div>
+      <div id="stageLyricPh">♪</div>
+    </div>
+  </div>
+
+  <!-- 微信对话场景覆盖层（仅 scene=wxchat 时 JS 点亮）：背景=歌曲封面；左=封面CD，右=玻璃对话框；
+       歌词由 ui.js 打字机逐句打成气泡（我一句对面一句），只显示已打出的歌词 -->
+  <div id="wxChat" aria-hidden="true">
+    <div id="wxBg"></div>
+    <div class="wx-left">
+      <div class="wx-cd">
+        <img id="wxCdImg" alt="" draggable="false" />
+        <i class="wx-cd-groove"></i>
+        <i class="wx-cd-hole"></i>
+      </div>
+      <div class="wx-meta"><b id="wxTitle">—</b><i id="wxArtist">—</i></div>
+    </div>
+    <div class="wx-right">
+      <div class="wx-panel">
+        <div class="wx-head">
+          <span class="wx-back">‹</span>
+          <span class="wx-head-name" id="wxChatName">对方</span>
+          <span class="wx-head-more">···</span>
+        </div>
+        <div class="wx-list" id="wxList"></div>
+        <div class="wx-inputbar">
+          <span class="wx-ib-icon">🎤</span>
+          <span class="wx-ib-box"></span>
+          <span class="wx-ib-icon">😊</span>
+          <span class="wx-ib-icon">＋</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 启动页 Splash：深蓝黑 · 星尘网格 · 大标题（无图片资源） -->
+  <div id="splash">
+    <!-- 最底层：极淡网格 + 蓝紫弥散雾 + 稀疏星尘（「银河」预设时由 canvas 取代） -->
+    <div class="sp-bg" aria-hidden="true">
+      <canvas id="spGalaxy"></canvas>
+      <div class="sp-grid"></div>
+      <div class="sp-mist sp-mist-a"></div>
+      <div class="sp-mist sp-mist-b"></div>
+      <div class="sp-stars" id="spStars"></div>
+    </div>
+
+    <!-- 顶层：发光大标题（视觉主角） -->
+    <div class="sp-title-wrap">
+      <span class="sp-deco"></span>
+      <h1 class="sp-word" aria-label="RhythmViz"><span class="sp-letter" style="--i:0"><span class="sp-letter-in">R</span></span><span class="sp-letter" style="--i:1"><span class="sp-letter-in">h</span></span><span class="sp-letter" style="--i:2"><span class="sp-letter-in">y</span></span><span class="sp-letter" style="--i:3"><span class="sp-letter-in">t</span></span><span class="sp-letter" style="--i:4"><span class="sp-letter-in">h</span></span><span class="sp-letter" style="--i:5"><span class="sp-letter-in">m</span></span><span class="sp-letter" style="--i:6"><span class="sp-letter-in">V</span></span><span class="sp-letter" style="--i:7"><span class="sp-letter-in">i</span></span><span class="sp-letter" style="--i:8"><span class="sp-letter-in">z</span></span></h1>
+      <span class="sp-deco"></span>
+      <div class="sp-sub">PRIVATE · VISUAL · RADIO</div>
+    </div>
+
+    <!-- 底部顶层：Loading 文本 + 蓝紫渐变进度条 -->
+    <div class="sp-load">
+      <div class="sp-load-text">Loading assets<span class="sp-dots">..</span></div>
+      <div class="sp-bar"><div class="sp-bar-fill" id="spBarFill"></div></div>
+    </div>
+  </div>
+
+  <!-- 自定义标题栏（无边框窗口拖拽区 + 窗口控制） -->
+  <header id="titlebar">
+    <div class="tb-drag">
+      <span class="tb-brand">RHYTHM<b>VIZ</b></span>
+      <span class="tb-tag">PRIVATE VISUAL RADIO</span>
+    </div>
+    <div class="tb-actions">
+      <button id="btnLyric" class="tb-btn" title="歌词设置（风格 / 字体 / 同步 / 特效）">词</button>
+      <button id="btnFx" class="tb-btn" title="视觉控制台">视觉</button>
+      <button id="btnEq" class="tb-btn" title="音效（均衡器）">效</button>
+      <button id="btnLogin" class="tb-btn" title="账号登录（网易云 / QQ音乐）">登录</button>
+      <button id="btnSys" class="tb-btn" title="设置（外观 / 音源 / 高级）">⚙</button>
+      <button id="btnFull" class="tb-btn" title="全屏 (F)">⛶</button>
+      <div class="tb-sep"></div>
+      <button id="btnMin" class="win-btn" title="最小化"><svg viewBox="0 0 14 14"><path d="M2 7h10"/></svg></button>
+      <button id="btnMax" class="win-btn" title="最大化/还原"><svg viewBox="0 0 14 14"><rect x="2.5" y="2.5" width="9" height="9" rx="1.5"/></svg></button>
+      <button id="btnClose" class="win-btn close" title="关闭"><svg viewBox="0 0 14 14"><path d="M3 3l8 8M11 3l-8 8"/></svg></button>
+    </div>
+  </header>
+
+  <!-- 播放页：大封面 + 滚动歌词（汽水音乐式） -->
+  <section id="np" class="hidden">
+    <button id="btnNpBack" class="np-back" title="返回主页 (Esc)">‹ 返回</button>
+    <div class="np-inner">
+      <div class="np-left">
+        <div class="np-cover-wrap">
+          <img id="npCover" referrerpolicy="no-referrer" alt="" draggable="false" />
+          <div class="np-cover-glow"></div>
+        </div>
+        <div class="np-meta">
+          <div id="npTitle">未播放</div>
+          <div id="npArtist">播放音乐时这里会展示封面与歌词</div>
+          <div class="np-acts">
+            <button id="npFav" class="np-act" title="喜欢">♡</button>
+            <button id="npAddPl" class="np-act" title="加入歌单">＋</button>
+          </div>
+        </div>
+      </div>
+      <div class="np-right">
+        <div id="lyrics" class="lyrics style-flow visible">
+          <div id="lyricTrack" class="lyric-track"></div>
+          <div id="lyricHint" class="lyric-hint">暂无歌词 — 播放在线音乐自动加载<br />本地音乐支持同目录 .lrc</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 首页仪表盘（未播放时显示） -->
+  <section id="home">
+    <div class="home-hero">
+      <div class="home-kicker">RHYTHMVIZ · 私人视觉电台</div>
+      <div class="home-greet" id="homeGreet">晚上好</div>
+      <div class="home-clock"><span id="homeDate">—</span><span class="clock-dot">·</span><span id="homeTime">--:--</span></div>
+    </div>
+
+    <!-- 首页直搜：搜索结果直接展示在首页 -->
+    <div class="home-search" id="homeSearchBox">
+      <span class="hs-icon">⌕</span>
+      <input id="homeSearchInput" type="text" placeholder="搜索歌曲 / 歌手，回车播放" autocomplete="off" />
+      <button id="homeSearchBtn" class="pill-btn">搜索</button>
+      <button id="homeSearchClear" class="pill-btn ghost hidden">返回</button>
+      <!-- QQ 音乐式下拉：搜索历史 + 热门搜索 -->
+      <div class="hs-drop hidden" id="hsDrop">
+        <div class="hsd-sec" id="hsdHistSec">
+          <div class="hsd-label">搜索历史</div>
+          <div id="hsdHist" class="hsd-tags"></div>
+        </div>
+        <div class="hsd-sec">
+          <div class="hsd-label">热门搜索</div>
+          <div id="hsdHot" class="hsd-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 搜索结果（搜索时替换信息流） -->
+    <div class="home-rail hidden" id="homeSearchSec">
+      <div class="rail-head"><span class="rail-kicker">RESULTS · 搜索结果</span><span id="homeSearchNote" class="rail-note"></span></div>
+      <div id="homeSearchGrid" class="hs-grid"></div>
+    </div>
+
+    <!-- 我的歌单（收藏的歌单集中在这里） -->
+    <div class="home-rail" id="myPlSec">
+      <div class="rail-head">
+        <span class="rail-kicker">MINE · 我的歌单</span>
+        <button id="btnNewPl" class="tab-btn new-pl-btn" title="新建歌单">＋ 新建歌单</button>
+        <span id="myPlNote" class="rail-note">收藏的歌单会出现在这里</span>
+      </div>
+      <div id="newPlPop" class="new-pl-pop hidden">
+        <button id="newPlCover" class="new-pl-cover" title="设置歌单封面（可选，点击选择图片）">
+          <img id="newPlCoverImg" class="hidden" alt="" draggable="false" />
+          <span id="newPlCoverPh">＋封面</span>
+        </button>
+        <input id="newPlName" type="text" placeholder="歌单名称" maxlength="20" autocomplete="off" />
+        <button id="newPlOk" class="pill-btn small">创建</button>
+      </div>
+      <div id="myPlGrid" class="pl-grid"></div>
+      <div id="myPlEmpty" class="rail-empty">还没有内容 — 播放页点 ♡ 喜欢歌曲、点 ＋ 加入歌单，或在下方「推荐歌单」收藏</div>
+    </div>
+
+    <div class="home-rail" id="hotRail">
+      <div class="rail-head"><span class="rail-kicker">HOT · 热歌榜</span><span id="hotNote" class="rail-note">加载中…</span></div>
+      <div id="hotRailRow" class="rail-row"></div>
+    </div>
+
+    <div class="home-rail" id="homeRecent">
+      <div class="rail-head"><span class="rail-kicker">RECENT · 最近在线</span><span id="homeStats" class="rail-note"></span></div>
+      <div id="homeRecentRow" class="rail-row"></div>
+    </div>
+
+    <div class="home-rail" id="recSongsRail">
+      <div class="rail-head"><span class="rail-kicker">SONGS · 推荐音乐</span><span id="recSongsNote" class="rail-note">加载中…</span></div>
+      <div id="recSongsRow" class="rail-row"></div>
+    </div>
+
+    <div class="home-pl">
+      <div class="rail-head">
+        <span class="rail-kicker">PLAYLISTS · 推荐歌单</span>
+        <div id="plViewSeg" title="切换视图">
+          <button class="tab-btn active" data-pv="grid" title="卡片视图">▦</button>
+          <button class="tab-btn" data-pv="wall" title="海报墙（滚轮缩放）">▤</button>
+        </div>
+        <button id="btnPlFull" class="tab-btn pl-full-btn" title="歌单全屏（软件内沉浸式，Esc 退出）">⛶ 全屏</button>
+        <span id="plNote" class="rail-note">加载中…</span>
+      </div>
+      <div id="plGrid" class="pl-grid"></div>
+    </div>
+  </section>
+
+  <!-- Folia 式歌单拼图：打开歌单进入，不规则矩形拼贴，正在播放/选中的封面居中放大 -->
+  <section id="plFolia" class="hidden">
+    <div class="pf-head">
+      <button id="btnPfBack" class="np-back" title="返回 (Esc)">‹ 返回</button>
+      <div class="pf-head-meta">
+        <span class="rail-kicker">PLAYLIST · 歌单拼图</span>
+        <div id="pfName" class="pf-name">歌单</div>
+        <div id="pfCount" class="pf-count">加载中…</div>
+      </div>
+      <div class="pf-acts">
+        <div id="pfBgSeg" class="pf-bg-seg" title="背景">
+          <button data-bg="home">主页</button><button data-bg="cover">封面</button>
+        </div>
+        <button id="btnPfPlayAll" class="pill-btn">播放全部</button>
+        <button id="btnPfFav" class="fav-btn" title="收藏到我的歌单">♥</button>
+      </div>
+    </div>
+    <!-- pfGrid 固定裁剪窗口；pfPlane 内层平面承载全部封面，相机 transform 只作用于平面 -->
+    <div id="pfGrid" class="pf-grid">
+      <canvas id="pfSphere" class="pf-sphere"></canvas>
+      <div id="pfPlane" class="pf-plane"></div>
+    </div>
+    <!-- 底部信息控制胶囊：正在播放曲名/歌手 + 控制条（常驻 Folia 底部，不再嵌入焦点封面） -->
+    <div id="pfHero">
+      <span id="pfHeroBadge" class="pf-hero-badge"><i></i>正在播放</span>
+      <div id="pfHeroMetaBox" class="pf-hero-meta"><b id="pfHeroName"></b><i id="pfHeroArtist"></i></div>
+      <div id="pfHeroCtrl" class="pf-hero-ctrl">
+        <button id="pfBtnPrev" class="pf-ctrl-btn" title="上一首">⏮</button>
+        <button id="pfBtnPlay" class="pf-ctrl-btn pf-ctrl-play" title="播放 / 暂停">▶</button>
+        <button id="pfBtnNext" class="pf-ctrl-btn" title="下一首">⏭</button>
+        <button id="pfBtnNp" class="pf-ctrl-btn" title="放大进入歌词MV">⤢</button>
+      </div>
+    </div>
+    <div id="pfEmpty" class="rail-empty hidden">歌单为空 — 去首页挑几首喜欢的歌吧</div>
+  </section>
+
+  <!-- 设置中心（右侧面板）：预设（场景 + 场景设置 + 动态）/ 歌词MV（视觉组）· 外观 / 高级 / 音源（设置组）· 音效（EQ组）；「歌词」分区已独立为顶栏「词」弹出的 #lyricPop 二级浮窗；原「动态」页内容已并入预设页 -->
+  <aside id="fxPanel">
+    <div class="fx-head">
+      <span class="fx-title">设置中心</span>
+      <button id="btnFxClose" class="tb-btn">✕</button>
+    </div>
+    <div class="fx-tabs">
+      <button class="fx-tab" data-ft="preset" data-grp="vis">预设</button>
+      <button class="fx-tab" data-ft="lyricmv" data-grp="vis">歌词MV</button>
+      <button class="fx-tab" data-ft="look" data-grp="set">外观</button>
+      <button class="fx-tab" data-ft="adv" data-grp="set">高级</button>
+      <button class="fx-tab" data-ft="src" data-grp="set">音源</button>
+      <button class="fx-tab" data-ft="sound" data-grp="eq">音效</button>
+    </div>
+    <div class="fx-body">
+
+      <!-- 预设：场景 + 一键整体风格 -->
+      <div class="ft-page" id="ft-preset">
+        <div class="fx-section-label">SCENES · 视觉场景</div>
+        <div class="preset-grid">
+          <button class="scene-btn preset-card" data-scene="cover">
+            <span class="pc-icon">✦</span>
+            <span class="pc-copy"><b>封面粒子</b><i>1000粒采样 · 节拍爆发</i></span>
+          </button>
+          <button class="scene-btn preset-card" data-scene="ring">
+            <span class="pc-icon">◎</span>
+            <span class="pc-copy"><b>圆环频谱</b><i>中心封面 · 双环放射</i></span>
+          </button>
+          <button class="scene-btn preset-card" data-scene="reactor">
+            <span class="pc-icon">◈</span>
+            <span class="pc-copy"><b>3D反应堆</b><i>圆形地台 · 水滴涟漪</i></span>
+          </button>
+          <button class="scene-btn preset-card" data-scene="core">
+            <span class="pc-icon">☀</span>
+            <span class="pc-copy"><b>能量核心</b><i>光追等离子球 · 电晕</i></span>
+          </button>
+          <button class="scene-btn preset-card" data-scene="aurora">
+            <span class="pc-icon">💿</span>
+            <span class="pc-copy"><b>CD 弹出</b><i>封面封套 · CD弹出旋转</i></span>
+          </button>
+          <button class="scene-btn preset-card" data-scene="flow">
+            <span class="pc-icon">❋</span>
+            <span class="pc-copy"><b>迪斯科球</b><i>镜面瓦片 · 扫光频谱</i></span>
+          </button>
+          <button class="scene-btn preset-card" data-scene="collide">
+            <span class="pc-icon">◉</span>
+            <span class="pc-copy"><b>流星碰撞</b><i>不规则陨石 · 3D碎块爆炸</i></span>
+          </button>
+          <button class="scene-btn preset-card" data-scene="vinyl">
+            <span class="pc-icon">◎</span>
+            <span class="pc-copy"><b>黑胶唱片</b><i>旋转唱盘 · 环形频谱</i></span>
+          </button>
+          <button class="scene-btn preset-card" data-scene="wave">
+            <span class="pc-icon">∿</span>
+            <span class="pc-copy"><b>声波涟漪</b><i>霓虹频谱环 · 水面倒影</i></span>
+          </button>
+          <button class="scene-btn preset-card" data-scene="field">
+            <span class="pc-icon">✺</span>
+            <span class="pc-copy"><b>能量场</b><i>聚拢爆发 · 高潮镜头震动</i></span>
+          </button>
+          <button class="scene-btn preset-card" data-scene="mirror">
+            <span class="pc-icon">≋</span>
+            <span class="pc-copy"><b>镜像波形</b><i>时域波形 · 青紫霓虹镜像</i></span>
+          </button>
+          <button class="scene-btn preset-card" data-scene="wxchat">
+            <span class="pc-icon">💬</span>
+            <span class="pc-copy"><b>微信对话</b><i>气泡打出歌词 · 噜噜表情</i></span>
+          </button>
+        </div>
+        <!-- 场景配色来源：所有可视化场景的颜色跟随对象（仅影响场景调色板，UI 主题色仍在「外观」页设置） -->
+        <div class="fx-section-label">COLOR · 场景配色跟随</div>
+        <div class="fx-seg" id="palSrcSeg">
+          <button data-cs="theme">跟随主题</button>
+          <button data-cs="bg">跟随背景</button>
+          <button data-cs="cover">跟随封面</button>
+        </div>
+        <div class="fx-row" style="margin-top:8px;">
+          <button id="tglPalRandom" class="fx-ghost" title="开启后自动随机更换所有场景的颜色，渐变过渡；触发时机由下方「换色触发」选择（跟随节奏/随机时间/固定时间）">🎲 随机颜色（自动渐变换色）</button>
+        </div>
+        <div class="fx-slider" style="margin-top:8px;"><span>换色速度</span><input id="fxPalSpeed" type="range" min="1" max="5" step="0.2" value="2.2" /><i id="fxPalSpeedV">2.2s</i></div>
+        <div class="fx-row" style="margin-top:8px; gap:6px; align-items:center;">
+          <span style="flex:none; font-size:11px; color:var(--fc-muted);">换色触发</span>
+          <button class="fx-ghost pal-trig" data-trig="beat">跟随节奏</button>
+          <button class="fx-ghost pal-trig" data-trig="random">随机时间</button>
+          <button class="fx-ghost pal-trig" data-trig="fixed">固定时间</button>
+        </div>
+        <div class="fx-slider hidden" id="fxPalGapRow" style="margin-top:8px;"><span>换色间隔</span><input id="fxPalGap" type="range" min="3" max="15" step="0.5" value="6" /><i id="fxPalGapV">6s</i></div>
+        <div class="fx-note" style="margin-top:6px;">选择所有视觉场景颜色的跟随对象：主题色（外观页设置）、主页自定义背景、或当前歌曲封面。「随机颜色」开启后自动换色（渐变过渡，对全部场景生效），换色速度控制过渡时长；换色触发可选跟随节奏点、随机时间或固定时间（后两者用换色间隔滑块定周期）。</div>
+        <!-- 场景专属设置容器：点击上方场景卡时 ui.js syncSceneCfg 只显示对应 data-cfg-scene 分区（默认全部隐藏）；
+             无专属设置的场景显示 generic 通用占位说明 -->
+        <div class="fx-section-label">SCENE CFG · 场景设置</div>
+        <div id="fxSceneCfg">
+          <!-- 封面粒子（真 3D 粒子云）：整体缩放 / 粒子数量 / 自动旋转 + 速度（写入 settings → mgr.coverCfg 每帧实时生效） -->
+          <div data-cfg-scene="cover" class="hidden">
+            <div class="fx-slider"><span>整体缩放</span><input id="fxPcvScale" type="range" min="50" max="200" value="100" /><i id="fxPcvScaleV">100%</i></div>
+            <div class="fx-slider"><span>粒子密度</span><input id="fxPcvCount" type="range" min="0" max="100" step="1" value="21" /><i id="fxPcvCountV">1000</i></div>
+            <div class="fx-row">
+              <button id="tglPcvSpin" class="fx-ghost on" title="关闭后仅手动拖拽旋转粒子云">🔄 自动旋转</button>
+            </div>
+            <div class="fx-slider"><span>旋转速度</span><input id="fxPcvSpd" type="range" min="0" max="100" value="30" /><i id="fxPcvSpdV">30</i></div>
+            <div class="fx-note">在舞台上按住拖拽可全方位旋转粒子云，松手带惯性缓停。</div>
+          </div>
+          <!-- 圆环频谱：节拍脉冲强度（settings.ringPulse 50-200% → mgr.ringCfg.pulse） -->
+          <div data-cfg-scene="ring" class="hidden">
+            <div class="fx-slider"><span>脉冲强度</span><input id="fxRingPulse" type="range" min="50" max="200" value="100" /><i id="fxRingPulseV">100%</i></div>
+          </div>
+          <!-- 反应堆：滴水间隔/透视倾角/高度增益/整体大小/网格密度/流星频率/随机跳动/金属光泽/自转（id 不变约定，ui.js 绑定自动生效；
+               全部写入 settings → mgr.reactorCfg 每帧实时生效，密度变化由场景内部比对重建网格） -->
+          <div data-cfg-scene="reactor" class="hidden">
+            <div class="fx-slider"><span>滴水间隔</span><input id="fxRplFreq" type="range" min="1" max="8" step="0.5" value="3.5" /><i id="fxRplFreqV">3.5s</i></div>
+            <div class="fx-slider"><span>倾斜角度</span><input id="fxRplTilt" type="range" min="0" max="10" value="4" /><i id="fxRplTiltV">4</i></div>
+            <div class="fx-slider"><span>高度增益</span><input id="fxRplGain" type="range" min="50" max="200" value="100" /><i id="fxRplGainV">100%</i></div>
+            <div class="fx-slider"><span>整体大小</span><input id="fxRplScale" type="range" min="50" max="200" value="100" /><i id="fxRplScaleV">100%</i></div>
+            <div class="fx-slider"><span>网格密度</span><input id="fxRplGrid" type="range" min="32" max="512" step="4" value="96" /><i id="fxRplGridV">96×96</i></div>
+            <div class="fx-slider"><span>流星频率</span><input id="fxRplMtr" type="range" min="0" max="100" step="5" value="55" /><i id="fxRplMtrV">55%</i></div>
+            <div class="fx-slider"><span>随机跳动</span><input id="fxRplRnd" type="range" min="0" max="200" value="100" /><i id="fxRplRndV">100%</i></div>
+            <div class="fx-slider"><span>金属光泽</span><input id="fxRplMetal" type="range" min="30" max="200" value="100" /><i id="fxRplMetalV">100%</i></div>
+            <div class="fx-row">
+              <button id="tglRplSpin" class="fx-ghost on" title="关闭后仅拖拽可改变视角">🔄 自动旋转</button>
+            </div>
+            <div class="fx-note">舞台上按住拖拽可全方位旋转地形，松手带惯性缓停；随机跳动让柱体随音乐错落起伏，金属光泽调节柱面高光强度。</div>
+          </div>
+          <!-- CD弹出：旋转速度/弹出幅度/整体亮度（settings.aur* → mgr.auroraCfg 每帧实时生效） -->
+          <div data-cfg-scene="aurora" class="hidden">
+            <div class="fx-slider"><span>旋转速度</span><input id="fxAurSpd" type="range" min="20" max="200" value="100" /><i id="fxAurSpdV">100%</i></div>
+            <div class="fx-slider"><span>弹出幅度</span><input id="fxAurDen" type="range" min="40" max="160" value="100" /><i id="fxAurDenV">100%</i></div>
+            <div class="fx-slider"><span>整体亮度</span><input id="fxAurBrt" type="range" min="50" max="200" value="100" /><i id="fxAurBrtV">100%</i></div>
+            <div class="fx-note">方形封面封套固定居左，CD 从封套右侧持续弹出旋转，碟面贴当前封面；播放控制器请用底部主控条。</div>
+          </div>
+          <!-- 迪斯科球：镜面数量/旋转速度/光点大小（settings.flw* → mgr.flowCfg；数量变化场景内重建） -->
+          <div data-cfg-scene="flow" class="hidden">
+            <div class="fx-slider"><span>镜面数量</span><input id="fxFlwCount" type="range" min="800" max="15000" step="100" value="6000" /><i id="fxFlwCountV">6000</i></div>
+            <div class="fx-slider"><span>旋转速度</span><input id="fxFlwSpd" type="range" min="20" max="200" value="100" /><i id="fxFlwSpdV">100%</i></div>
+            <div class="fx-slider"><span>光点大小</span><input id="fxFlwSize" type="range" min="50" max="200" value="100" /><i id="fxFlwSizeV">100%</i></div>
+            <div class="fx-note">镜面瓦片按频段点亮：低频在下半球、高频在上半球；鼓点加速自转并爆闪白光。数量越多镜面越细密，低配设备建议 ≤8000。</div>
+          </div>
+          <!-- 声波涟漪：波浪高度/涟漪强度/流动速度（settings.wav* → mgr.waveCfg 每帧实时生效） -->
+          <div data-cfg-scene="wave" class="hidden">
+            <div class="fx-slider"><span>频谱幅度</span><input id="fxWavAmp" type="range" min="30" max="200" value="100" /><i id="fxWavAmpV">100%</i></div>
+            <div class="fx-slider"><span>水面波纹</span><input id="fxWavRip" type="range" min="0" max="200" value="100" /><i id="fxWavRipV">100%</i></div>
+            <div class="fx-slider"><span>旋转流速</span><input id="fxWavSpd" type="range" min="30" max="200" value="100" /><i id="fxWavSpdV">100%</i></div>
+          </div>
+          <!-- 流星碰撞：碎片数量/飞行阻尼/爆炸强度/拖尾亮度（settings.col* → mgr.collideCfg） -->
+          <div data-cfg-scene="collide" class="hidden">
+            <div class="fx-slider"><span>碎片数量</span><input id="fxColCount" type="range" min="300" max="2400" step="50" value="1300" /><i id="fxColCountV">1300</i></div>
+            <div class="fx-slider"><span>飞行阻尼</span><input id="fxColRest" type="range" min="50" max="100" value="92" /><i id="fxColRestV">0.92</i></div>
+            <div class="fx-slider"><span>爆炸强度</span><input id="fxColShock" type="range" min="0" max="200" value="100" /><i id="fxColShockV">100%</i></div>
+            <div class="fx-slider"><span>拖尾亮度</span><input id="fxColTrail" type="range" min="0" max="90" value="45" /><i id="fxColTrailV">45%</i></div>
+            <div class="fx-note">3D 不规则陨石持续飞行，节拍触发撞击爆炸，3D 岩石碎块翻滚扩散（大节奏扩散更大）；碎块灼热→冷却变色并带环境反射光追质感，飞行中表面持续剥落碎屑。</div>
+          </div>
+          <!-- 能量场：粒子数量/爆发强度/镜头震动（settings.fld* → mgr.fieldCfg 每帧实时生效） -->
+          <div data-cfg-scene="field" class="hidden">
+            <div class="fx-slider"><span>粒子数量</span><input id="fxFldCount" type="range" min="300" max="2400" step="50" value="900" /><i id="fxFldCountV">900</i></div>
+            <div class="fx-slider"><span>爆发强度</span><input id="fxFldPower" type="range" min="50" max="200" value="100" /><i id="fxFldPowerV">100%</i></div>
+            <div class="fx-slider"><span>镜头震动</span><input id="fxFldShake" type="range" min="0" max="100" value="70" /><i id="fxFldShakeV">70%</i></div>
+            <div class="fx-note">低频粒子向心聚拢、高频向外爆发；鼓点增加亮度；旋律持续形成螺旋流线；高潮段混入红橙高光 + 镜头震动推近。</div>
+          </div>
+          <!-- 镜像波形：波形幅度/辉光强度/粒子数量（settings.mir* → mgr.mirrorCfg 每帧实时生效） -->
+          <div data-cfg-scene="mirror" class="hidden">
+            <div class="fx-slider"><span>波形幅度</span><input id="fxMirAmp" type="range" min="50" max="200" value="100" /><i id="fxMirAmpV">100%</i></div>
+            <div class="fx-slider"><span>辉光强度</span><input id="fxMirGlow" type="range" min="50" max="200" value="100" /><i id="fxMirGlowV">100%</i></div>
+            <div class="fx-slider"><span>粒子数量</span><input id="fxMirCount" type="range" min="0" max="300" step="10" value="140" /><i id="fxMirCountV">140</i></div>
+            <div class="fx-note">音频时域波形沿中心零线上下完全镜像，左青蓝→右紫粉横向渐变 + 霓虹辉光；音量越大拉伸越高，鼓点冲高尖刺并喷射发光粒子。</div>
+          </div>
+          <!-- 微信对话：玻璃面板透明度（settings.wxOp 5-70 → body --wx-op 即时生效） -->
+          <div data-cfg-scene="wxchat" class="hidden">
+            <div class="fx-slider"><span>玻璃透明度</span><input id="fxWxOp" type="range" min="5" max="70" value="26" /><i id="fxWxOpV">26%</i></div>
+            <div class="fx-note">歌词变成微信聊天记录：我一句对面一句逐字打出，时不时发一只噜噜表情包；左侧封面 CD 旋转，背景为当前歌曲封面，此场景自动隐藏悬浮歌词。</div>
+          </div>
+          <!-- 其余场景：通用占位说明（pv 场景由 ui.js 换成「见歌词MV页」提示） -->
+          <div data-cfg-scene="generic" class="hidden">
+            <div class="fx-note" id="fxSceneCfgNote" style="margin-top:0;">该场景暂无专属设置。</div>
+          </div>
+        </div>
+        <!-- 动态内容（自「动态」页并入预设页末尾）：视觉灵敏度 + 面板歌词动效 + 快捷切换 -->
+        <div class="fx-section-label">MOTION · 视觉动态</div>
+        <div class="fx-slider"><span>视觉灵敏度</span><input id="fxSens" type="range" min="40" max="200" value="100" /><i id="fxSensV">100</i></div>
+        <div class="fx-row">
+          <button id="tglAnim" class="fx-ghost on" title="关闭可降低性能消耗">✨ 面板歌词动效</button>
+        </div>
+        <div class="fx-section-label">QUICK · 快捷切换</div>
+        <!-- 3 列等宽网格（每格 ≈92px）：旧版 flex 一行挤 4~5 个按钮，每格只剩 64px，
+             「反应堆 / CD弹出 / 声波涟漪 / 流星碰撞 / 镜像波形」都被省略号截断 → 改网格后最长的
+             「◉ 流星碰撞」(79px) 也能完整显示 -->
+        <div class="fx-row fx-grid3">
+          <button class="fx-ghost scene-quick" data-scene="cover">✦ 粒子</button>
+          <button class="fx-ghost scene-quick" data-scene="reactor">◈ 反应堆</button>
+          <button class="fx-ghost scene-quick" data-scene="aurora">💿 CD弹出</button>
+          <button class="fx-ghost scene-quick" data-scene="vinyl">◎ 唱片</button>
+          <button class="fx-ghost scene-quick" data-scene="wave">∿ 声波涟漪</button>
+          <button class="fx-ghost scene-quick" data-scene="collide">◉ 流星碰撞</button>
+          <button class="fx-ghost scene-quick" data-scene="field">✺ 能量场</button>
+          <button class="fx-ghost scene-quick" data-scene="mirror">≋ 镜像波形</button>
+          <button class="fx-ghost scene-quick" data-scene="wxchat">💬 微信对话</button>
+          <button class="fx-ghost scene-quick" data-scene="pv">▶ 歌词动画</button>
+        </div>
+        <div class="fx-note">灵敏度越高，频谱与节拍冲击越明显；低配设备可关闭面板歌词动效。</div>
+      </div>
+
+      <!-- 歌词动画·文字MV：pv 场景按钮 + 12 风格 + 字号/垂直/暗度微调（id 全部不变；SIDE LYRICS 分区已再迁入顶栏「词」#lyricPop 浮窗） -->
+      <div class="ft-page hidden" id="ft-lyricmv">
+        <div class="fx-section-label">LYRIC MV · 歌词动画文字MV</div>
+        <!-- 特殊场景（文字MV）独立居中按钮，复用 scene-btn 切换逻辑 -->
+        <div class="pv-hero-row">
+          <button class="scene-btn pv-hero" data-scene="pv">
+            <span class="pc-icon">▶</span>
+            <span class="pc-copy"><b>✦ 歌词动画 · 文字MV</b><i>24种动画 · 6背景</i></span>
+          </button>
+        </div>
+        <div class="fx-note" style="margin-top:8px;">切换到歌词动画场景后，在此选 20 种整体风格（配色 + 动效 + 手法全套，点击即时生效），滑块微调画面亮度。</div>
+        <div class="fx-seg fx-seg-wrap" id="pvStyleSeg">
+          <button data-ps="noir">黑白默片</button>
+          <button data-ps="crimson">绯红</button>
+          <button data-ps="caution">警示黄</button>
+          <button data-ps="magenta">品红</button>
+          <button data-ps="paper">纸张</button>
+          <button data-ps="hud">HUD</button>
+          <button data-ps="mint">薄荷</button>
+          <button data-ps="specimen">标本</button>
+          <button data-ps="transit">换乘指示</button>
+          <button data-ps="blueprint">蓝图</button>
+          <button data-ps="rouge">胭脂</button>
+          <button data-ps="mono">单色</button>
+          <button data-ps="aurora">极光</button>
+          <button data-ps="cyber">赛博</button>
+          <button data-ps="sunset">落日</button>
+          <button data-ps="ink">水墨</button>
+          <button data-ps="neon">霓虹</button>
+          <button data-ps="vintage">复古</button>
+          <button data-ps="matrix">矩阵</button>
+          <button data-ps="dream">梦境</button>
+        </div>
+        <div class="fx-slider"><span>亮度</span><input id="fxPvDim" type="range" min="0" max="100" value="65" /><i id="fxPvDimV">65</i></div>
+      </div>
+
+      <!-- 外观：全局 + 氛围 + 背景更换 + 启动页 -->
+      <div class="ft-page hidden" id="ft-look">
+        <div class="fx-section-label">GLOBAL · 全局</div>
+        <div class="fx-seg fx-seg-wrap" id="uiFontSeg">
+          <button data-uf="">默认</button>
+          <button data-uf="Microsoft YaHei" style="font-family:'Microsoft YaHei'">雅黑</button>
+          <button data-uf="SimSun" style="font-family:'SimSun'">宋体</button>
+          <button data-uf="SimHei" style="font-family:'SimHei'">黑体</button>
+          <button data-uf="KaiTi" style="font-family:'KaiTi'">楷体</button>
+          <button data-uf="FangSong" style="font-family:'FangSong'">仿宋</button>
+          <button data-uf="DengXian" style="font-family:'DengXian'">等线</button>
+          <button data-uf="Georgia" style="font-family:'Georgia'">衬线英</button>
+          <button data-uf="Consolas" style="font-family:'Consolas'">等宽</button>
+        </div>
+        <div class="fx-slider"><span>玻璃透明</span><input id="fxGlass" type="range" min="10" max="90" value="45" /><i id="fxGlassV">45</i></div>
+        <div class="fx-slider"><span>界面亮度</span><input id="glBright" type="range" min="60" max="130" value="100" /><i id="glBrightV">100</i></div>
+        <div class="fx-note">全局字体仅作用于界面文字（歌词字体请在「歌词」页单独设置）；玻璃透明控制面板/悬浮舱背景不透明度，亮度实时调亮调暗，均即时生效并记忆。</div>
+        <div class="fx-section-label">MOOD · 氛围</div>
+        <div class="fx-slider"><span>背景模糊</span><input id="fxBgBlur" type="range" min="0" max="160" value="90" /><i id="fxBgBlurV">90</i></div>
+        <div class="fx-slider"><span>背景亮度</span><input id="fxBgBright" type="range" min="10" max="80" value="42" /><i id="fxBgBrightV">42</i></div>
+        <div class="fx-row">
+          <button id="tglTheme" class="fx-ghost on" title="封面取色驱动全局配色">🎨 封面取色</button>
+        </div>
+        <div class="fx-section-label">BACKDROP · 背景</div>
+        <div class="fx-row">
+          <button id="btnBgPick" class="fx-ghost">🖼 选择图片</button>
+          <button id="btnBgVideo" class="fx-ghost">🎬 本地视频</button>
+          <button id="btnBgClear" class="fx-ghost">清除背景</button>
+        </div>
+        <div class="fx-row bg-swatches">
+          <button class="fx-swatch sw-aurora" data-bgp="aurora" title="极光绿洲"></button>
+          <button class="fx-swatch sw-dusk" data-bgp="dusk" title="暮色紫金"></button>
+          <button class="fx-swatch sw-mono" data-bgp="mono" title="墨岩"></button>
+          <button class="fx-swatch sw-mint" data-bgp="mint" title="薄荷深潭"></button>
+          <button class="fx-swatch sw-rose" data-bgp="rose" title="玫瑰暮云"></button>
+          <button class="fx-swatch sw-forest" data-bgp="forest" title="森夜"></button>
+          <button class="fx-swatch sw-graphite" data-bgp="graphite" title="石墨蓝"></button>
+          <button class="fx-swatch sw-violet" data-bgp="violet" title="深空紫"></button>
+          <button class="fx-swatch sw-ocean" data-bgp="ocean" title="深海蓝"></button>
+          <button class="fx-swatch sw-cosmos" data-bgp="cosmos" title="星云"></button>
+          <button class="fx-swatch sw-ember" data-bgp="ember" title="余烬橙"></button>
+          <button class="fx-swatch sw-jade" data-bgp="jade" title="青玉"></button>
+        </div>
+        <div class="fx-note">图片/视频背景会替换动态舞台；渐变预设与可视化场景叠加显示，切回任意场景即恢复舞台。</div>
+        <div class="fx-section-label">SPLASH · 启动页</div>
+        <div class="fx-row bg-swatches" id="spSwatches">
+          <button class="fx-swatch sp-sw sp-follow on" data-sp="follow" title="跟随背景颜色">随</button>
+          <button class="fx-swatch sp-sw" data-sp="mr-galaxy" style="background:linear-gradient(135deg,#0a0e18 10%,#00e8c8 48%,#ff2250 90%)" title="银河（Mineradio 风 · WebGL 动态）"></button>
+          <button class="fx-swatch sp-sw" data-sp="168" style="background:linear-gradient(135deg,#7ffce8,#00b39a)" title="薄荷"></button>
+          <button class="fx-swatch sp-sw" data-sp="205" style="background:linear-gradient(135deg,#9fdcff,#1a6fd4)" title="冰蓝"></button>
+          <button class="fx-swatch sp-sw" data-sp="225" style="background:linear-gradient(135deg,#b8c8ff,#3a5cd4)" title="靛蓝"></button>
+          <button class="fx-swatch sp-sw" data-sp="262" style="background:linear-gradient(135deg,#d3b8ff,#7c4dff)" title="紫罗兰"></button>
+          <button class="fx-swatch sp-sw" data-sp="290" style="background:linear-gradient(135deg,#f0b8ff,#c040d4)" title="品红"></button>
+          <button class="fx-swatch sp-sw" data-sp="338" style="background:linear-gradient(135deg,#ffc2d4,#e0356b)" title="樱粉"></button>
+          <button class="fx-swatch sp-sw" data-sp="42" style="background:linear-gradient(135deg,#ffe8b8,#d4a017)" title="香槟金"></button>
+          <button class="fx-swatch sp-sw" data-sp="22" style="background:linear-gradient(135deg,#ffd0a0,#e07020)" title="暖橙"></button>
+          <button class="fx-swatch sp-sw" data-sp="148" style="background:linear-gradient(135deg,#c8ffc0,#3a9a3a)" title="森绿"></button>
+        </div>
+        <div class="fx-note">启动页为丝绸飘带光带，飘带、背景、标题辉光均跟随此处选择的颜色变化；选「随」则跟随全局背景主色相。</div>
+        <div class="fx-row" style="margin-top:6px;align-items:center;gap:10px;">
+          <label class="fx-note" style="margin:0;flex:none;">自定义颜色</label>
+          <input id="spCustomColor" type="color" value="#3a78d4" style="width:46px;height:28px;border:none;border-radius:8px;background:none;cursor:pointer;" title="自定义启动页背景色" />
+          <button id="spCustomApply" class="fx-ghost" style="flex:none;padding:5px 12px;">应用</button>
+          <button id="spCustomReset" class="fx-ghost" style="flex:none;padding:5px 12px;">恢复预设</button>
+        </div>
+        <div class="fx-note">点击颜色框选任意色，应用后启动页背景、飘带、标题辉光即时联动变色。</div>
+        <div class="fx-row" style="margin-top:6px;">
+          <button id="spBgPick" class="fx-ghost">🖼 自定义背景图片</button>
+          <button id="spBgClear" class="fx-ghost">恢复默认</button>
+        </div>
+        <div class="fx-note">选择图片后作为启动页背景铺满显示（自动叠加深色压暗罩保证标题与进度条可读），飘带/网格/星尘仍叠加其上；恢复默认回到纯色渐变主题，重启后自动保持。</div>
+        <div class="fx-section-label">THEME · 主题颜色</div>
+        <div class="fx-row bg-swatches" id="uiHueSwatches">
+          <button class="fx-swatch uh-sw uh-follow on" data-uh="follow" title="跟随封面取色">随</button>
+          <button class="fx-swatch uh-sw" data-uh="160" style="background:linear-gradient(135deg,#7ffce8,#00b39a)" title="薄荷"></button>
+          <button class="fx-swatch uh-sw" data-uh="195" style="background:linear-gradient(135deg,#9ff2fc,#00a8b8)" title="冰蓝"></button>
+          <button class="fx-swatch uh-sw" data-uh="210" style="background:linear-gradient(135deg,#9fdcff,#1a6fd4)" title="天蓝"></button>
+          <button class="fx-swatch uh-sw" data-uh="232" style="background:linear-gradient(135deg,#b0c0ff,#2a4fd4)" title="靛蓝"></button>
+          <button class="fx-swatch uh-sw" data-uh="270" style="background:linear-gradient(135deg,#d3b8ff,#7c4dff)" title="紫罗兰"></button>
+          <button class="fx-swatch uh-sw" data-uh="300" style="background:linear-gradient(135deg,#f0b8ff,#c040d4)" title="品红"></button>
+          <button class="fx-swatch uh-sw" data-uh="335" style="background:linear-gradient(135deg,#ffc2d4,#e0356b)" title="樱粉"></button>
+          <button class="fx-swatch uh-sw" data-uh="355" style="background:linear-gradient(135deg,#ffb8c2,#d42040)" title="绯红"></button>
+          <button class="fx-swatch uh-sw" data-uh="45" style="background:linear-gradient(135deg,#ffe8b8,#d4a017)" title="香槟金"></button>
+          <button class="fx-swatch uh-sw" data-uh="25" style="background:linear-gradient(135deg,#ffd0a0,#e07020)" title="暖橙"></button>
+        </div>
+        <div class="fx-row" style="margin-top:6px;align-items:center;gap:10px;">
+          <label class="fx-note" style="margin:0;flex:none;">自定义颜色</label>
+          <input id="uhCustomColor" type="color" value="#3a78d4" style="width:46px;height:28px;border:none;border-radius:8px;background:none;cursor:pointer;" title="自定义主题颜色" />
+          <button id="uhCustomApply" class="fx-ghost" style="flex:none;padding:5px 12px;">应用</button>
+          <button id="uhCustomReset" class="fx-ghost" style="flex:none;padding:5px 12px;">恢复跟随封面</button>
+        </div>
+        <div class="fx-note">固定主题色后按钮高亮、滑块、开关、选中态与辉光使用所选颜色（只改界面，不改背景与可视化配色）；「随」恢复跟随封面取色。</div>
+      </div>
+
+      <!-- 音效：五段 EQ + 预设 + 混响 / 回声 / 空间音频 / 压缩 / 播放速度 -->
+      <div class="ft-page hidden" id="ft-sound">
+        <div class="fx-section-label">EQUALIZER · 五段均衡</div>
+        <div class="fx-slider"><span>超低频</span><input id="eqSub" type="range" min="-12" max="12" value="0" step="1" /><i id="eqSubV">0</i></div>
+        <div class="fx-slider"><span>低频</span><input id="eqLow" type="range" min="-12" max="12" value="0" step="1" /><i id="eqLowV">0</i></div>
+        <div class="fx-slider"><span>中频</span><input id="eqMid" type="range" min="-12" max="12" value="0" step="1" /><i id="eqMidV">0</i></div>
+        <div class="fx-slider"><span>高频</span><input id="eqHigh" type="range" min="-12" max="12" value="0" step="1" /><i id="eqHighV">0</i></div>
+        <div class="fx-slider"><span>超高频</span><input id="eqPres" type="range" min="-12" max="12" value="0" step="1" /><i id="eqPresV">0</i></div>
+        <div class="fx-section-label">EQ PRESETS · 音效预设</div>
+        <div class="fx-row">
+          <button class="fx-ghost eq-preset" data-eqp="flat">原声</button>
+          <button class="fx-ghost eq-preset" data-eqp="bass">低音增强</button>
+          <button class="fx-ghost eq-preset" data-eqp="vocal">人声</button>
+          <button class="fx-ghost eq-preset" data-eqp="treble">高音清晰</button>
+          <button class="fx-ghost eq-preset" data-eqp="electronic">电子</button>
+        </div>
+        <div class="fx-row">
+          <button class="fx-ghost eq-preset" data-eqp="rock">摇滚</button>
+          <button class="fx-ghost eq-preset" data-eqp="live">演唱会</button>
+          <button class="fx-ghost eq-preset" data-eqp="ktv">KTV</button>
+          <button class="fx-ghost eq-preset" data-eqp="studio">录音棚</button>
+          <button class="fx-ghost eq-preset" data-eqp="ethereal">空灵</button>
+        </div>
+        <div class="fx-section-label">REVERB · 混响</div>
+        <div class="fx-slider"><span>混响强度</span><input id="fxReverb" type="range" min="0" max="100" value="0" /><i id="fxReverbV">0%</i></div>
+        <div class="fx-section-label">ECHO · 回声</div>
+        <div class="fx-slider"><span>回声时长</span><input id="fxEchoTime" type="range" min="20" max="1000" value="280" /><i id="fxEchoTimeV">280ms</i></div>
+        <div class="fx-slider"><span>反馈量</span><input id="fxEchoFb" type="range" min="0" max="85" value="35" /><i id="fxEchoFbV">35%</i></div>
+        <div class="fx-slider"><span>回声强度</span><input id="fxEchoWet" type="range" min="0" max="100" value="0" /><i id="fxEchoWetV">0%</i></div>
+        <div class="fx-section-label">SPATIAL · 空间音频</div>
+        <div class="fx-row" id="spatialSeg">
+          <button class="fx-ghost active" data-sp="off">关闭</button>
+          <button class="fx-ghost" data-sp="front">前方</button>
+          <button class="fx-ghost" data-sp="behind">后方</button>
+          <button class="fx-ghost" data-sp="left">左侧</button>
+          <button class="fx-ghost" data-sp="right">右侧</button>
+          <button class="fx-ghost" data-sp="above">上方</button>
+          <button class="fx-ghost" data-sp="orbit">环绕</button>
+          <button class="fx-ghost" data-sp="orbit-fast">快环绕</button>
+        </div>
+        <div class="fx-section-label">COMPRESSOR · 响度压缩</div>
+        <div class="fx-row">
+          <button class="fx-ghost active" id="fxCompOn">压缩：开</button>
+        </div>
+        <div class="fx-slider"><span>阈值</span><input id="fxCompThr" type="range" min="-40" max="-6" value="-18" /><i id="fxCompThrV">-18dB</i></div>
+        <div class="fx-slider"><span>压缩比</span><input id="fxCompRatio" type="range" min="1" max="20" value="3" /><i id="fxCompRatioV">3:1</i></div>
+        <div class="fx-section-label">SPEED · 播放速度</div>
+        <div class="fx-slider"><span>速度</span><input id="fxSpeed" type="range" min="50" max="200" step="25" value="100" list="speedSteps" /><i id="fxSpeedV">1.0x</i>
+          <datalist id="speedSteps"><option value="50"></option><option value="75"></option><option value="100"></option><option value="125"></option><option value="150"></option><option value="175"></option><option value="200"></option></datalist>
+        </div>
+        <div class="fx-note">五段均衡（60/220/1.2k/5.2k/12k Hz，±12dB）实时生效；混响/回声/空间音频/压缩均基于 Web Audio 实时处理。</div>
+      </div>
+
+      <!-- 高级：本地曲库 + 舞台 + 缓存 + 关闭行为（音源已独立到 ft-src） -->
+      <div class="ft-page hidden" id="ft-adv">
+        <div class="fx-section-label">LIBRARY · 本地曲库</div>
+        <div class="fx-row">
+          <button id="btnFxImport" class="fx-ghost">♪ 导入文件</button>
+          <button id="btnFxImportDir" class="fx-ghost">🗂 导入文件夹</button>
+        </div>
+        <div class="fx-note">批量导入本地音乐（含子文件夹），歌曲进入播放列表，并在首页「我的歌单」置顶显示为本地歌曲卡。</div>
+        <div class="fx-section-label">STAGE · 舞台</div>
+        <div class="fx-row">
+          <button id="btnDemo" class="fx-ghost">▶ 演示曲</button>
+          <button id="btnFxFull" class="fx-ghost">全屏 (F)</button>
+          <button id="btnFxLyric" class="fx-ghost">播放页 (L)</button>
+        </div>
+        <div class="fx-row">
+          <button id="btnFullLyric" class="fx-ghost">⛶ 全屏歌词</button>
+          <button id="btnFocus" class="fx-ghost">◎ 专注模式</button>
+          <button id="btnMini" class="fx-ghost">▤ 迷你窗</button>
+        </div>
+        <div class="fx-section-label">CACHE · 缓存</div>
+        <div class="fx-row">
+          <button id="btnClearCache" class="fx-ghost">🗑 清除音频缓存</button>
+        </div>
+        <div class="fx-note">清除后台预取的歌单音频缓存（LRU 上限 800MB），不影响歌单与收藏。</div>
+        <div class="fx-section-label">CLOSE · 关闭行为</div>
+        <div class="fx-row" id="closeActSeg">
+          <button class="fx-ghost active" data-ca="ask" title="点击 ✕ 时每次询问">每次询问</button>
+          <button class="fx-ghost" data-ca="minimize" title="点击 ✕ 隐藏到托盘，音乐继续播放">最小化到托盘</button>
+          <button class="fx-ghost" data-ca="exit" title="点击 ✕ 立即退出应用">直接退出</button>
+        </div>
+        <div class="fx-note">最小化到托盘后，点击托盘图标恢复窗口；托盘右键菜单可退出。</div>
+        <div class="fx-note">拖入音频文件可随时添加本地音乐（也可在播放列表抽屉导入）。</div>
+      </div>
+      <!-- 音源：独立的音源管理分区（从原"高级·音源"拆分） -->
+      <div class="ft-page hidden" id="ft-src">
+        <div class="fx-section-label">SOURCES · 音源</div>
+        <div class="fx-row">
+          <button id="btnFxSrcMgr" class="fx-ghost">🧩 音源管理</button>
+        </div>
+        <div class="fx-note">全部音源均为外部独立插件文件，停用或删除文件即可移除；主程序不内置任何音源。</div>
+        <div class="fx-note">在音源管理抽屉中可导入外部音源文件、查看音源状态与版本更新。</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- 歌词设置二级浮窗：顶栏「词」点击弹出/收起（ui.js 控制开关与按钮下方定位，Esc / 点击浮窗外关闭）；
+       内容为原设置中心「歌词」分区 + SIDE LYRICS 侧边悬浮歌词分区（自歌词MV页迁入，id 均不变，ui.js 绑定自动生效），.fx-body 复用内滚与分区样式 -->
+  <div id="lyricPop">
+    <div class="lyric-pop-head">
+      <span class="fx-title">歌词设置</span>
+      <button id="lyricPopClose" class="tb-btn" title="关闭 (Esc)">✕</button>
+    </div>
+    <div class="fx-body">
+      <div class="fx-section-label">LYRICS · 歌词风格</div>
+      <div class="fx-seg" id="lyricStyleSeg">
+        <button data-ls="flow">流光</button>
+        <button data-ls="heart">心象</button>
+        <button data-ls="cloud">云阶</button>
+        <button data-ls="chars">浮名</button>
+        <button data-ls="crowd">群唱</button>
+        <button data-ls="neon">霓虹</button>
+        <button data-ls="ink">墨</button>
+      </div>
+      <div class="fx-section-label">FONT · 歌词字体</div>
+      <div class="fx-seg" id="lyricFontSeg">
+        <button data-lf="">默认</button>
+        <button data-lf="Microsoft YaHei" style="font-family:'Microsoft YaHei'">雅黑</button>
+        <button data-lf="SimSun" style="font-family:'SimSun'">宋体</button>
+        <button data-lf="SimHei" style="font-family:'SimHei'">黑体</button>
+        <button data-lf="KaiTi" style="font-family:'KaiTi'">楷体</button>
+        <button data-lf="FangSong" style="font-family:'FangSong'">仿宋</button>
+        <button data-lf="DengXian" style="font-family:'DengXian'">等线</button>
+        <button data-lf="Georgia" style="font-family:'Georgia'">衬线英</button>
+        <button data-lf="Consolas" style="font-family:'Consolas'">等宽</button>
+      </div>
+      <div class="fx-section-label">SYNC · 歌词同步</div>
+      <div class="fx-slider"><span>对齐微调</span><input id="fxLyrOffset" type="range" min="-3" max="3" value="0" step="0.1" /><i id="fxLyrOffsetV">0.0</i></div>
+      <div class="fx-note">歌词比人声快则右调延后，比人声慢则左调提前（±3 秒，实时生效）。</div>
+      <div class="fx-section-label">TEXT FX · 文字特效</div>
+      <div class="fx-slider"><span>文字发光</span><input id="fxGlow" type="range" min="0" max="40" value="18" /><i id="fxGlowV">18</i></div>
+      <div class="fx-slider"><span>外描边</span><input id="fxStroke" type="range" min="0" max="6" value="0" step="0.5" /><i id="fxStrokeV">0</i></div>
+      <div class="fx-slider"><span>投影</span><input id="fxShadow" type="range" min="0" max="100" value="30" /><i id="fxShadowV">30</i></div>
+      <div class="fx-row">
+        <button id="tglBounce" class="fx-ghost on" title="鼓点联动歌词弹跳">🥁 鼓点弹跳</button>
+      </div>
+      <div class="fx-note">逐字歌词支持 TTML/LRC，点击任意歌词行可跳转播放进度。</div>
+      <!-- SIDE LYRICS · 侧边悬浮歌词：位置/旋转/行数（自歌词MV页迁入；id 不变，ui.js 绑定自动生效，写入 settings 拖动即时生效） -->
+      <div class="fx-section-label">SIDE LYRICS · 侧边悬浮歌词</div>
+      <!-- 「旋转」= 整列绕自身中间轴 360° 自转，0/360 正对观众、90/270 侧对观众、180 转到背面 -->
+      <div class="fx-slider"><span>旋转</span><input id="fxSlTilt" type="range" min="0" max="360" value="46" /><i id="fxSlTiltV">46</i></div>
+      <div class="fx-slider"><span>行数</span><input id="fxSlRows" type="range" min="3" max="15" value="5" /><i id="fxSlRowsV">5</i></div>
+      <div class="fx-slider"><span>位置</span><input id="fxSlPosY" type="range" min="0" max="100" value="50" /><i id="fxSlPosYV">50</i></div>
+      <!-- 左右：整列水平位置，0 贴左缘 / 100 贴右缘，中间任意；过半自动切换右对齐（文字朝屏幕内侧） -->
+      <div class="fx-slider"><span>左右</span><input id="fxSlPosX" type="range" min="0" max="100" value="0" /><i id="fxSlPosXV">0</i></div>
+      <div class="fx-slider"><span>大小</span><input id="fxSlSize" type="range" min="60" max="180" value="100" /><i id="fxSlSizeV">100</i></div>
+      <!-- 自动旋转：开启后整列以正面为中心左右自动摇摆（±55° 正弦），3D 体块/光照随动；手拖「旋转」滑杆即退出自动 -->
+      <button class="fx-ghost" id="slAutoBtn">自动旋转：关</button>
+      <!-- 悬浮歌词独立字体：与歌词面板 --lyric-font 分开，写 --sl-font（follow=跟随歌词面板字体） -->
+      <div class="fx-section-label">SL FONT · 悬浮歌词字体</div>
+      <div class="fx-seg fx-seg-wrap" id="slFontSeg">
+        <button data-slf="follow">跟随面板</button>
+        <button data-slf="Microsoft YaHei" style="font-family:'Microsoft YaHei'">雅黑</button>
+        <button data-slf="SimSun" style="font-family:'SimSun'">宋体</button>
+        <button data-slf="SimHei" style="font-family:'SimHei'">黑体</button>
+        <button data-slf="KaiTi" style="font-family:'KaiTi'">楷体</button>
+        <button data-slf="FangSong" style="font-family:'FangSong'">仿宋</button>
+        <button data-slf="DengXian" style="font-family:'DengXian'">等线</button>
+        <button data-slf="Georgia" style="font-family:'Georgia'">衬线英</button>
+        <button data-slf="Consolas" style="font-family:'Consolas'">等宽</button>
+      </div>
+      <!-- 悬浮歌词独立风格：scene=跟随场景配色（现状）；数字=固定色相（body 挂 data-sl-style="custom" + --sl-style-hue） -->
+      <div class="fx-section-label">SL STYLE · 悬浮歌词风格</div>
+      <div class="fx-seg" id="slStyleSeg">
+        <button data-sls="scene">跟随场景</button>
+        <button data-sls="0">纯白</button>
+        <button data-sls="160">薄荷</button>
+        <button data-sls="42">香槟金</button>
+        <button data-sls="330">樱粉</button>
+        <button data-sls="195">冰蓝</button>
+      </div>
+      <div class="fx-row">
+        <button class="fx-ghost" id="sl3dBtn">立体字：关</button>
+        <button class="fx-ghost" id="slKaraokeBtn">卡拉OK：关</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 账号登录二级浮窗：顶栏「登录」按钮弹出，列出可扫码登录的音源平台；
+       点平台 → 同一浮窗内切到三级二维码视图（只显示二维码，不是打开网页：
+       网易云走官方取码接口本地渲染二维码，QQ音乐由宿主隐藏窗口取回二维码原图）
+       「登录」标题栏返回键回到平台列表；扫码成功后自动写入 Cookie 并回到列表 -->
+  <div id="loginPop">
+    <div class="login-pop-head">
+      <button id="loginQrBack" class="tb-btn hidden" title="返回平台列表">‹</button>
+      <span class="fx-title" id="loginPopTitle">账号登录</span>
+      <button id="loginPopClose" class="tb-btn" title="关闭 (Esc)">✕</button>
+    </div>
+    <div class="fx-body">
+      <div id="loginPlatView">
+        <div class="fx-section-label">PLATFORM · 选择平台</div>
+        <div id="loginPlatList"></div>
+        <div class="fx-note">点平台后在下方直接扫描二维码登录；登录后请求自动携带账号 Cookie，可解锁 VIP 歌曲并提升搜索覆盖。</div>
+      </div>
+      <div id="loginQrView" class="hidden">
+        <div class="login-qr-name" id="loginQrName">平台</div>
+        <div class="login-qr-box">
+          <span id="loginQrPh" class="login-qr-ph">二维码加载中…</span>
+          <img id="loginQrImg" alt="登录二维码" draggable="false" />
+        </div>
+        <div class="login-qr-hint" id="loginQrHint"></div>
+        <div class="login-qr-status" id="loginQrStatus">正在获取二维码…</div>
+        <button id="loginQrRefresh" class="pill-btn small hidden">刷新二维码</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 右侧抽屉：播放列表 / 歌单详情 / 音源管理 -->
+  <aside id="drawer">
+    <div class="drawer-head">
+      <div class="tabs">
+        <button data-tab="list" class="tab-btn active">播放列表</button>
+        <button data-tab="pl" class="tab-btn hidden" id="tabPlBtn">歌单</button>
+        <button data-tab="src" class="tab-btn" id="tabSrcBtn">音源</button>
+      </div>
+      <button id="btnCloseDrawer" class="tb-btn">✕</button>
+    </div>
+    <div id="tab-list" class="tab-page">
+      <div class="drawer-actions">
+        <button id="btnImport" class="pill-btn">导入文件</button>
+        <button id="btnImportDir" class="pill-btn">导入文件夹</button>
+        <button id="btnClearList" class="pill-btn ghost">清空</button>
+      </div>
+      <ul id="playList" class="track-list"></ul>
+      <div id="listEmpty" class="empty-tip">还没有歌曲<br />拖入音频文件 / 点上方按钮导入</div>
+    </div>
+    <div id="tab-pl" class="tab-page hidden">
+      <div class="pl-detail-head">
+        <img id="plDetailCover" referrerpolicy="no-referrer" alt="" />
+        <div class="pl-detail-meta">
+          <div id="plDetailName">歌单</div>
+          <div id="plDetailCount">加载中…</div>
+          <div class="pl-detail-acts">
+            <button id="btnPlayAll" class="pill-btn">播放全部</button>
+            <button id="btnFavDetail" class="fav-btn" title="收藏到我的歌单">♥</button>
+          </div>
+        </div>
+      </div>
+      <ul id="plDetailList" class="track-list"></ul>
+    </div>
+    <!-- 音源管理：外部音源导入 / 状态监控 / 代理 / 版本 -->
+    <div id="tab-src" class="tab-page hidden">
+      <div class="src-toolbar">
+        <button id="btnSrcImport" class="pill-btn">导入音源文件</button>
+        <button id="btnSrcProxy" class="pill-btn ghost">代理设置</button>
+      </div>
+      <div id="srcProxyBox" class="src-proxy hidden">
+        <div class="src-proxy-tip">每行一条代理，支持 HTTP 与 SOCKS；请求按顺序轮换使用，失败自动冷却。</div>
+        <textarea id="srcProxyList" rows="4" spellcheck="false" placeholder="http://127.0.0.1:7890&#10;socks5://127.0.0.1:1080"></textarea>
+        <div class="drawer-actions">
+          <button id="btnSrcProxySave" class="pill-btn">保存并启用</button>
+          <button id="btnSrcProxyOff" class="pill-btn ghost">停用代理</button>
+        </div>
+      </div>
+      <div id="srcList" class="src-list"></div>
+      <div class="src-note">
+        全部音源均为外部独立插件文件，停用或删除文件即可移除；主程序不内置任何音源。<br />
+        接口规范：search / getPlayUrl / getLyric / init(host) — 参考 <b>sources/sample-source.demo.js</b>
+      </div>
+    </div>
+  </aside>
+
+  <!-- 音源导入警告（醒目弹窗） -->
+  <div id="srcWarnModal" class="hidden">
+    <div class="sw-card">
+      <div class="sw-title">⚠️ 注意 · 导入第三方音源</div>
+      <p class="sw-text">第三方音源可能采用非官方接口，仅允许<b>个人本地学习研究</b>，禁止打包分发、分享、商用。可能存在版权侵权风险，接口随时会失效，相关责任由导入者自行承担。</p>
+      <label class="sw-ack"><input type="checkbox" id="swAck" /> 我已知晓上述风险，仅用于个人本地学习研究</label>
+      <div class="fx-row">
+        <button id="swConfirm" class="pill-btn" disabled>继续导入</button>
+        <button id="swCancel" class="pill-btn ghost">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 首启安全提示（合规声明，必须显式勾选确认） -->
+  <div id="secNoticeModal" class="hidden">
+    <div class="sw-card">
+      <div class="sw-title">🛡️ 安全提示 · 请务必阅读</div>
+      <p class="sw-text">本软件<b>不内置任何音源</b>，不提供任何需授权的版权内容，主程序本身无版权风险。</p>
+      <p class="sw-text">如你自行导入<b>第三方音源扩展</b>：该音源的一切网络请求与风险由其作者与使用者自行承担，仅允许<b>个人本地学习研究</b>，禁止打包分发、分享、商用；由此产生的版权风险与法律责任与本软件无关。</p>
+      <p class="sw-text sw-dim">隐私说明：不收集任何个人数据；播放直链不落盘，仅缓存歌曲元数据、封面与歌词文本。</p>
+      <label class="sw-ack"><input type="checkbox" id="secNoticeAck" /> 我已阅读并理解上述内容</label>
+      <div class="fx-row">
+        <button id="secNoticeOk" class="pill-btn" disabled>进入应用</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 关闭确认：直接退出 / 最小化到托盘（可记住选择，设置 → 高级·音源 可修改） -->
+  <div id="closeAskModal" class="hidden">
+    <div class="sw-card">
+      <div class="sw-title">关闭 律动 RhythmViz</div>
+      <p class="sw-text"><b>最小化到托盘</b>：窗口隐藏到系统托盘，音乐继续播放，点击托盘图标随时恢复。<br /><b>直接退出</b>：结束应用并停止播放。</p>
+      <label class="sw-ack"><input type="checkbox" id="closeAskRemember" /> 记住我的选择（可在 设置 → 高级·音源 中修改）</label>
+      <div class="fx-row">
+        <button id="closeAskMin" class="pill-btn">最小化到托盘</button>
+        <button id="closeAskExit" class="pill-btn ghost">直接退出</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 底部播放条：单条液态玻璃 dock -->
+  <footer id="bottombar" class="chrome">
+    <div id="progressBar">
+      <div id="seekPlayed"></div>
+      <div id="seekKnob"></div>
+    </div>
+    <div class="bb-inner">
+      <div class="bb-left">
+        <button id="btnNp" class="cover-btn" title="打开播放页">
+          <img id="coverThumb" referrerpolicy="no-referrer" alt="" draggable="false" />
+          <span class="cover-up">⤢</span>
+        </button>
+        <div class="bb-meta">
+          <div id="tTitle">未播放</div>
+          <div id="tArtist">从首页开始 · 拖入音乐或在线搜索</div>
+        </div>
+      </div>
+      <div class="bb-center">
+        <button id="btnShuffle" class="ctrl-btn side" title="播放模式：顺序循环（点击切换）">→</button>
+        <button id="btnPrev" class="ctrl-btn" title="上一首">⏮</button>
+        <button id="btnPlay" class="play-btn" title="播放/暂停 (空格)">▶</button>
+        <button id="btnNext" class="ctrl-btn" title="下一首">⏭</button>
+      </div>
+      <div class="bb-right">
+        <button id="btnHome" class="ctrl-btn" title="首页">⌂</button>
+        <span id="curTime" class="time">0:00</span>
+        <span class="time-sep">/</span>
+        <span id="durTime" class="time">0:00</span>
+        <button id="btnVolume" class="ctrl-btn" title="静音">🔊</button>
+        <input id="volume" type="range" min="0" max="100" value="80" />
+        <button id="btnList" class="ctrl-btn" title="播放列表">☰</button>
+      </div>
+    </div>
+  </footer>
+
+  <!-- 拖放提示 & Toast -->
+  <div id="dropHint" class="hidden">松开以添加音乐</div>
+
+  <!-- 加入歌单浮层菜单（播放页 ＋ 按钮） -->
+  <div id="songMenu" class="hidden">
+    <div class="sm-title">加入歌单</div>
+    <div id="smList" class="sm-list"></div>
+    <div class="sm-new">
+      <input id="smNewName" type="text" placeholder="新歌单名称" maxlength="20" />
+      <button id="smNewBtn" class="pill-btn small">创建</button>
+    </div>
+  </div>
+
+  <div id="toasts"></div>
+
+  <!-- 二维码生成器（网易云扫码内容为纯文本，需在本地渲染成二维码图形；CSP script-src 'self' 不允许外链） -->
+  <script src="js/vendor/qrcode.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

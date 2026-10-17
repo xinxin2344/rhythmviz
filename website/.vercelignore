@@ -1,0 +1,2 @@
+# Vercel 部署排除：GIF 生成用的原始帧（index.html 未引用，133MB）
+shots/frames

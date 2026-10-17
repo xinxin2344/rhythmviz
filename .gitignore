@@ -1,0 +1,48 @@
+# ===== 依赖 =====
+node_modules/
+
+# ===== 构建产物 =====
+/dist*/
+/dist.old/
+*.asar
+.tmp/
+.tmp-*/
+mobile/dist/
+mobile/www/
+mobile/android/.gradle/
+mobile/android/build/
+mobile/android/app/build/
+mobile/android/capacitor-cordova-android-plugins/build/
+# cap sync 自动生成，勿手改
+mobile/android/app/src/main/assets/
+mobile/android/app/capacitor.build.gradle
+mobile/android/capacitor.settings.gradle
+
+# ===== 签名密钥与本机配置（切勿提交） =====
+mobile/android/keystore.properties
+mobile/android/local.properties
+*.jks
+*.keystore
+
+# ===== IDE =====
+.idea/
+.vscode/
+*.iml
+
+# ===== 安装包与临时文件 =====
+*.apk
+*.exe
+*.dll
+*.pak
+*.dat
+_shot_*.png
+.tmp-poster-cap.cjs
+.trae-html-share-packages/
+
+# ===== 部署目录（含 COS 运维工具链，不属于产品源码） =====
+eo-deploy/
+
+# ===== 官网大文件（APK / exe 走 GitHub Release 与 VPS，不入库） =====
+website/download/
+# 抽帧临时产物，页面未引用
+website/shots/frames/

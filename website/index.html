@@ -1,0 +1,1265 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>律动 RhythmViz · 音乐有形，律动可见</title>
+<meta name="description" content="聚合搜索、双源歌单与沉浸式动效，安静地收进同一个播放器。Windows 桌面端免费下载。">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="favicon.png">
+<style>
+  :root {
+    --bg: #060608;
+    --bg-soft: #0c0c10;
+    --fg: #f4f4f6;
+    --muted: #8f8f99;
+    --line: rgba(255, 255, 255, 0.08);
+    --card: rgba(255, 255, 255, 0.035);
+    --card-hover: rgba(255, 255, 255, 0.06);
+    --accent: #a78bfa;
+    --accent2: #2dd4bf;
+    --grad: linear-gradient(120deg, #a78bfa, #2dd4bf);
+    --radius: 20px;
+    --nav-h: 64px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: "PingFang SC", "Microsoft YaHei", -apple-system, "Segoe UI", sans-serif;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: rgba(167, 139, 250, 0.35); }
+  a { color: inherit; text-decoration: none; }
+  img { display: block; max-width: 100%; }
+
+  /* ---------- 背景质感：漂移环境光 + 顶部网格 + 胶片噪点 ---------- */
+  .glow {
+    position: fixed; border-radius: 50%; filter: blur(120px);
+    pointer-events: none; z-index: 0; will-change: transform, opacity;
+  }
+  .glow-a { width: 560px; height: 560px; top: -180px; left: -120px; background: rgba(167, 139, 250, 0.22); animation: drift-a 26s ease-in-out infinite alternate; }
+  .glow-b { width: 640px; height: 640px; top: 30%; right: -260px; background: rgba(45, 212, 191, 0.17); animation: drift-b 32s ease-in-out infinite alternate; }
+  .glow-c { width: 520px; height: 520px; bottom: -220px; left: 30%; background: rgba(167, 139, 250, 0.15); animation: drift-c 24s ease-in-out infinite alternate; }
+  @keyframes drift-a { from { transform: translate(0, 0) scale(1); } to { transform: translate(90px, 60px) scale(1.15); } }
+  @keyframes drift-b { from { transform: translate(0, 0) scale(1.08); } to { transform: translate(-80px, -50px) scale(0.94); } }
+  @keyframes drift-c { from { transform: translate(0, 0); opacity: 0.75; } to { transform: translate(60px, -70px); opacity: 1; } }
+
+  /* 细网格：仅页面上半部分可见，向下渐隐，工程图纸感 */
+  body::before {
+    content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+      linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    background-size: 72px 72px;
+    -webkit-mask-image: radial-gradient(ellipse 100% 62% at 50% 0%, #000 25%, transparent 72%);
+    mask-image: radial-gradient(ellipse 100% 62% at 50% 0%, #000 25%, transparent 72%);
+  }
+
+  /* 胶片噪点：细碎颗粒盖全页，消除纯黑底的塑料感 */
+  body::after {
+    content: ""; position: fixed; inset: 0; z-index: 2; pointer-events: none; opacity: 0.032;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* 星尘：两层不同密度的星点纵深，缓慢闪烁 */
+  .starfield, .starfield-b {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  }
+  .starfield {
+    opacity: 0.55; animation: twinkle 4.6s ease-in-out infinite alternate;
+    background-image:
+      radial-gradient(1.6px 1.6px at 7% 14%, rgba(255,255,255,0.85), transparent 60%),
+      radial-gradient(1.2px 1.2px at 18% 46%, rgba(255,255,255,0.6), transparent 60%),
+      radial-gradient(1.8px 1.8px at 31% 8%, rgba(196,181,253,0.9), transparent 60%),
+      radial-gradient(1.1px 1.1px at 42% 30%, rgba(255,255,255,0.5), transparent 60%),
+      radial-gradient(1.4px 1.4px at 55% 12%, rgba(255,255,255,0.7), transparent 60%),
+      radial-gradient(1.2px 1.2px at 66% 40%, rgba(153,246,228,0.7), transparent 60%),
+      radial-gradient(1.7px 1.7px at 78% 9%, rgba(255,255,255,0.8), transparent 60%),
+      radial-gradient(1.1px 1.1px at 90% 28%, rgba(255,255,255,0.55), transparent 60%),
+      radial-gradient(1.3px 1.3px at 12% 82%, rgba(255,255,255,0.6), transparent 60%),
+      radial-gradient(1.5px 1.5px at 36% 74%, rgba(196,181,253,0.65), transparent 60%),
+      radial-gradient(1.2px 1.2px at 61% 88%, rgba(255,255,255,0.5), transparent 60%),
+      radial-gradient(1.6px 1.6px at 84% 70%, rgba(153,246,228,0.6), transparent 60%),
+      radial-gradient(1.1px 1.1px at 95% 52%, rgba(255,255,255,0.5), transparent 60%);
+  }
+  .starfield-b {
+    opacity: 0.3; animation: twinkle 6.8s ease-in-out infinite alternate-reverse;
+    background-image:
+      radial-gradient(1px 1px at 4% 58%, rgba(255,255,255,0.6), transparent 60%),
+      radial-gradient(1px 1px at 26% 22%, rgba(255,255,255,0.5), transparent 60%),
+      radial-gradient(1px 1px at 48% 62%, rgba(255,255,255,0.55), transparent 60%),
+      radial-gradient(1px 1px at 58% 36%, rgba(255,255,255,0.45), transparent 60%),
+      radial-gradient(1px 1px at 72% 60%, rgba(255,255,255,0.6), transparent 60%),
+      radial-gradient(1px 1px at 88% 84%, rgba(255,255,255,0.5), transparent 60%),
+      radial-gradient(1px 1px at 97% 12%, rgba(255,255,255,0.45), transparent 60%),
+      radial-gradient(1px 1px at 16% 94%, rgba(255,255,255,0.5), transparent 60%);
+  }
+  @keyframes twinkle { from { opacity: 0.22; } to { opacity: 0.6; } }
+
+  /* 极光斜带：超宽柔光斜跨页面，缓慢平移 */
+  .aurora-band {
+    position: fixed; top: -32%; left: -40%; width: 180%; height: 62%;
+    z-index: 0; pointer-events: none; filter: blur(34px);
+    background: linear-gradient(105deg, transparent 32%, rgba(167, 139, 250, 0.1) 45%, rgba(45, 212, 191, 0.12) 55%, transparent 70%);
+    transform: rotate(-8deg);
+    animation: band-drift 20s ease-in-out infinite alternate;
+  }
+  @keyframes band-drift { from { transform: rotate(-8deg) translateX(-5%); } to { transform: rotate(-8deg) translateX(5%); } }
+
+  /* ---------- 启动动效：星尘汇聚 · 逐字入场 · 流光扫字 ---------- */
+  #intro {
+    position: fixed; inset: 0; z-index: 300; background: var(--bg);
+    display: grid; place-items: center; overflow: hidden;
+    transition: opacity 0.75s ease, visibility 0.75s, transform 0.75s ease, filter 0.75s ease;
+  }
+  #intro.bye { opacity: 0; visibility: hidden; pointer-events: none; transform: scale(1.045); filter: blur(8px); }
+  .intro-inner { position: relative; text-align: center; z-index: 2; }
+
+  /* 银河螺旋：核心亮斑 + 双旋臂，倾斜缓转 */
+  .in-galaxy {
+    position: absolute; left: 50%; top: 50%; z-index: 0; pointer-events: none;
+    width: 135vmax; height: 135vmax;
+    transform: translate(-50%, -50%) rotate(-16deg);
+    opacity: 0; animation: gal-in 2.2s ease 0.1s forwards;
+  }
+  .in-galaxy i {
+    display: block; width: 100%; height: 100%; border-radius: 50%;
+    background:
+      radial-gradient(ellipse 13% 13% at 50% 50%, rgba(233, 213, 255, 0.32), transparent 70%),
+      conic-gradient(from 90deg, transparent 0deg, rgba(167, 139, 250, 0.15) 55deg, transparent 122deg, rgba(45, 212, 191, 0.12) 198deg, transparent 268deg, rgba(167, 139, 250, 0.07) 322deg, transparent 360deg);
+    filter: blur(36px);
+    animation: gal-spin 90s linear infinite;
+  }
+  @keyframes gal-in { to { opacity: 1; } }
+  @keyframes gal-spin { to { transform: rotate(360deg); } }
+
+  /* 轨道星：三颗粒子绕品牌字缓转 */
+  .in-orbit {
+    position: absolute; left: 50%; top: 50%; z-index: 1; pointer-events: none;
+    width: min(620px, 86vw); height: min(620px, 86vw);
+    transform: translate(-50%, -50%);
+    opacity: 0; animation: gal-in 1.6s ease 0.55s forwards;
+  }
+  .in-orbit-r { position: absolute; inset: 0; animation: orb-spin 26s linear infinite; }
+  @keyframes orb-spin { to { transform: rotate(360deg); } }
+  .in-orbit-r i { position: absolute; width: 3px; height: 3px; border-radius: 50%; }
+  .in-orbit-r .o1 { left: 50%; top: 0; background: #e9d5ff; box-shadow: 0 0 10px 2px rgba(196, 181, 253, 0.8); }
+  .in-orbit-r .o2 { left: 9%; top: 76%; background: #5eead4; box-shadow: 0 0 10px 2px rgba(94, 234, 212, 0.8); }
+  .in-orbit-r .o3 { right: 7%; top: 64%; background: #fff; box-shadow: 0 0 9px 1px rgba(255, 255, 255, 0.75); }
+
+  /* 星尘：从四周飘入并闪烁 */
+  .in-stars { position: absolute; inset: 0; z-index: 1; }
+  .in-stars i {
+    position: absolute; left: var(--x); top: var(--y);
+    width: var(--s, 2px); height: var(--s, 2px); border-radius: 50%;
+    background: var(--c, #fff);
+    box-shadow: 0 0 8px 1px var(--c, rgba(255,255,255,0.7));
+    opacity: 0; transform: translate(var(--tx, 0), var(--ty, 20px)) scale(0.2);
+    animation: star-pop 1.5s cubic-bezier(0.2, 0.7, 0.3, 1) var(--d, 0s) forwards;
+  }
+  @keyframes star-pop {
+    0% { opacity: 0; transform: translate(var(--tx, 0), var(--ty, 20px)) scale(0.2); }
+    45% { opacity: 1; }
+    100% { opacity: 0.85; transform: translate(0, 0) scale(1); }
+  }
+
+  /* 品牌字后光环呼吸 */
+  .in-halo {
+    position: absolute; left: 50%; top: 46%; z-index: 1;
+    width: min(560px, 80vw); height: 240px; transform: translate(-50%, -50%);
+    background: radial-gradient(ellipse 55% 60% at 50% 50%, rgba(167, 139, 250, 0.22), rgba(45, 212, 191, 0.08) 55%, transparent 75%);
+    filter: blur(18px); opacity: 0;
+    animation: halo-in 1.6s ease 0.35s forwards, halo-breath 2.6s ease-in-out 1.2s infinite alternate;
+  }
+  @keyframes halo-in { to { opacity: 1; } }
+  @keyframes halo-breath { from { transform: translate(-50%, -50%) scale(1); } to { transform: translate(-50%, -50%) scale(1.09); } }
+
+  /* 逐字入场 */
+  .intro-logo { font-size: clamp(36px, 6.4vw, 66px); font-weight: 900; letter-spacing: 0.05em; perspective: 480px; }
+  .i-l {
+    display: inline-block; opacity: 0;
+    transform: translateY(0.55em) rotateX(45deg) scale(0.92);
+    animation: l-in 0.68s cubic-bezier(0.2, 0.75, 0.3, 1.15) calc(0.2s + var(--i) * 0.055s) forwards;
+  }
+  @keyframes l-in { to { opacity: 1; transform: none; } }
+  /* 流光扫字：渐变字面周期性扫过一道亮彩 */
+  .i-l.g {
+    background: linear-gradient(110deg, #a78bfa 0%, #a78bfa 32%, #e9d5ff 42%, #5eead4 52%, #2dd4bf 62%, #2dd4bf 100%);
+    background-size: 260% 100%;
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent; color: transparent;
+    animation: l-in 0.68s cubic-bezier(0.2, 0.75, 0.3, 1.15) calc(0.2s + var(--i) * 0.055s) forwards,
+               l-flow 2.4s linear calc(0.9s + var(--i) * 0.045s) infinite;
+  }
+  @keyframes l-flow { from { background-position: 120% 0; } to { background-position: -140% 0; } }
+
+  /* 副标语淡入 */
+  .intro-sub {
+    margin-top: 16px; font-size: 12px; letter-spacing: 0.5em; text-indent: 0.5em;
+    color: var(--muted); opacity: 0; transform: translateY(8px);
+    animation: l-in 0.8s ease 1.05s forwards;
+  }
+
+  /* 进度线：渐变光头发光扫过 */
+  .intro-line {
+    width: min(260px, 54vw); height: 2px; margin: 30px auto 0;
+    border-radius: 2px; background: rgba(255, 255, 255, 0.09); overflow: hidden;
+    opacity: 0; animation: l-in 0.5s ease 0.55s forwards;
+  }
+  .intro-line i {
+    display: block; height: 100%; width: 42%; border-radius: 2px;
+    background: var(--grad); box-shadow: 0 0 12px 1px rgba(45, 212, 191, 0.65);
+    animation: in-sweep 1.5s cubic-bezier(0.45, 0.05, 0.35, 1) 0.7s both;
+  }
+  @keyframes in-sweep { from { transform: translateX(-110%); } to { transform: translateX(255%); } }
+
+  /* ---------- 导航 ---------- */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    height: var(--nav-h);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 clamp(20px, 5vw, 56px);
+    background: rgba(6, 6, 8, 0.55);
+    backdrop-filter: blur(18px) saturate(1.4);
+    -webkit-backdrop-filter: blur(18px) saturate(1.4);
+    border-bottom: 1px solid var(--line);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: 0.04em; font-size: 15px; }
+  .brand .dot {
+    width: 26px; height: 26px; border-radius: 8px;
+    background: var(--grad);
+    display: grid; place-items: center;
+    font-size: 14px; color: #0a0a0c; font-weight: 900;
+  }
+  .nav-links { display: flex; align-items: center; gap: clamp(14px, 3vw, 34px); font-size: 13.5px; color: var(--muted); }
+  .nav-links a { transition: color 0.2s; }
+  .nav-links a:hover { color: var(--fg); }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 22px; border-radius: 999px;
+    font-size: 13.5px; font-weight: 600;
+    border: 1px solid var(--line);
+    background: var(--card);
+    transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.3, 1), background 0.25s, box-shadow 0.25s;
+    cursor: pointer; color: var(--fg);
+  }
+  .btn:hover { transform: translateY(-2px); background: var(--card-hover); }
+  .btn.primary {
+    background: var(--grad); color: #0a0a0c; border: none;
+    box-shadow: 0 8px 28px rgba(167, 139, 250, 0.35);
+  }
+  .btn.primary:hover { box-shadow: 0 12px 36px rgba(45, 212, 191, 0.4); }
+  .btn.nav-cta { padding: 8px 18px; }
+
+  /* ---------- 布局通用 ---------- */
+  main { position: relative; z-index: 1; }
+  section { padding: clamp(70px, 10vw, 130px) clamp(20px, 6vw, 72px); max-width: 1180px; margin: 0 auto; }
+  .kicker {
+    display: inline-block; font-size: 11.5px; letter-spacing: 0.28em;
+    color: var(--muted); text-transform: uppercase; margin-bottom: 18px;
+  }
+  .kicker::before { content: ""; display: inline-block; width: 22px; height: 1px; background: var(--grad); vertical-align: middle; margin-right: 10px; }
+  h2.sec-title { font-size: clamp(26px, 4vw, 42px); font-weight: 800; letter-spacing: 0.01em; margin-bottom: 14px; }
+  .sec-sub { color: var(--muted); font-size: 15px; line-height: 1.8; max-width: 560px; }
+
+  /* 滚动渐入 */
+  .reveal { opacity: 0; transform: translateY(34px); transition: opacity 0.9s cubic-bezier(0.2, 0.7, 0.3, 1), transform 0.9s cubic-bezier(0.2, 0.7, 0.3, 1); }
+  .reveal.on { opacity: 1; transform: none; }
+
+  /* ---------- Hero ---------- */
+  .hero {
+    position: relative;
+    min-height: 100svh;
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    text-align: center; padding-top: calc(var(--nav-h) + 40px);
+  }
+  /* 顶部舞台聚光：一束柔光打在品牌名上 */
+  .hero::before {
+    content: ""; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+    width: min(980px, 94vw); height: 520px; pointer-events: none;
+    background: radial-gradient(ellipse 62% 100% at 50% 0%, rgba(167, 139, 250, 0.15), rgba(45, 212, 191, 0.05) 45%, transparent 72%);
+  }
+  .hero > * { position: relative; }
+  .hero-tags {
+    display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+    font-size: 11px; letter-spacing: 0.22em; color: var(--muted); margin-bottom: 30px;
+  }
+  .hero-tags span { padding: 6px 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); }
+  .hero h1 {
+    font-size: clamp(44px, 9vw, 104px);
+    font-weight: 900; line-height: 1.08; letter-spacing: 0.02em;
+    margin-bottom: 26px;
+  }
+  .hero h1 .grad {
+    background: var(--grad);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent; color: transparent;
+  }
+  .hero p.sub { color: var(--muted); font-size: clamp(15px, 2vw, 18px); line-height: 1.9; max-width: 520px; margin-bottom: 40px; }
+  .hero-cta { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; margin-bottom: 22px; }
+  .hero-note { font-size: 12px; color: var(--muted); letter-spacing: 0.12em; margin-bottom: 54px; }
+  .hero-shot {
+    width: min(920px, 92vw); border-radius: 24px; overflow: hidden;
+    border: 1px solid var(--line);
+    box-shadow: 0 40px 120px rgba(0, 0, 0, 0.6), 0 0 90px rgba(167, 139, 250, 0.12);
+    transform: perspective(1400px) rotateX(4deg);
+    transition: transform 0.8s cubic-bezier(0.2, 0.7, 0.3, 1);
+  }
+  .hero-shot:hover { transform: perspective(1400px) rotateX(0deg) scale(1.01); }
+
+  /* ---------- 数据条 ---------- */
+  .stats {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+    padding-top: 0;
+  }
+  .stat {
+    padding: 30px 26px; border-radius: var(--radius);
+    background: var(--card); border: 1px solid var(--line);
+    transition: transform 0.3s, background 0.3s;
+  }
+  .stat:hover { transform: translateY(-4px); background: var(--card-hover); }
+  .stat b {
+    display: block; font-size: clamp(26px, 3.4vw, 38px); font-weight: 900;
+    background: var(--grad); -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent; color: transparent;
+    margin-bottom: 8px;
+  }
+  .stat span { font-size: 12.5px; color: var(--muted); letter-spacing: 0.06em; }
+
+  /* ---------- 大功能块（图文交替） ---------- */
+  .feat {
+    display: grid; grid-template-columns: 1fr 1.2fr; gap: clamp(30px, 5vw, 70px);
+    align-items: center; margin-bottom: clamp(70px, 9vw, 120px);
+  }
+  .feat:last-child { margin-bottom: 0; }
+  .feat.flip { grid-template-columns: 1.2fr 1fr; }
+  .feat.flip .feat-text { order: 2; }
+  .feat-text h3 { font-size: clamp(22px, 3vw, 32px); font-weight: 800; margin-bottom: 16px; }
+  .feat-text p { color: var(--muted); font-size: 14.5px; line-height: 2; margin-bottom: 20px; }
+  .feat-tags { display: flex; gap: 8px; flex-wrap: wrap; }
+  .feat-tags span {
+    font-size: 11px; padding: 5px 12px; border-radius: 999px;
+    border: 1px solid var(--line); color: var(--muted); background: var(--card);
+  }
+  .feat-shot {
+    border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+    transition: transform 0.6s cubic-bezier(0.2, 0.7, 0.3, 1), box-shadow 0.6s;
+  }
+  .feat-shot:hover { transform: translateY(-6px); box-shadow: 0 34px 100px rgba(167, 139, 250, 0.16); }
+  .feat-shot img { width: 100%; height: 100%; object-fit: cover; }
+
+  /* ---------- 特性网格 ---------- */
+  .grid-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 50px; }
+  .g-card {
+    padding: 30px 28px; border-radius: var(--radius);
+    background: var(--card); border: 1px solid var(--line);
+    transition: transform 0.3s, background 0.3s, border-color 0.3s;
+  }
+  .g-card:hover { transform: translateY(-5px); background: var(--card-hover); border-color: rgba(167, 139, 250, 0.35); }
+  .g-card .ico {
+    width: 44px; height: 44px; border-radius: 12px; margin-bottom: 18px;
+    display: grid; place-items: center; font-size: 20px;
+    background: linear-gradient(135deg, rgba(167, 139, 250, 0.18), rgba(45, 212, 191, 0.14));
+    border: 1px solid var(--line);
+  }
+  .g-card h4 { font-size: 16.5px; font-weight: 700; margin-bottom: 10px; }
+  .g-card p { font-size: 13px; color: var(--muted); line-height: 1.9; }
+
+  /* ---------- 界面画廊 ---------- */
+  .gal-head { margin-top: clamp(60px, 8vw, 100px); margin-bottom: 34px; }
+  .gal-head h3 { font-size: clamp(20px, 2.6vw, 28px); font-weight: 800; margin-bottom: 10px; }
+  .gal-head p { color: var(--muted); font-size: 14px; }
+  .gal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .gal-item {
+    position: relative; border-radius: var(--radius); overflow: hidden;
+    border: 1px solid var(--line); box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+    transition: transform 0.6s cubic-bezier(0.2, 0.7, 0.3, 1), box-shadow 0.6s;
+  }
+  .gal-item:hover { transform: translateY(-6px); box-shadow: 0 34px 100px rgba(167, 139, 250, 0.16); }
+  .gal-item.wide { grid-column: 1 / -1; }
+  .gal-item img { width: 100%; height: 100%; object-fit: cover; }
+  .gal-item figcaption {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    padding: 44px 22px 16px;
+    background: linear-gradient(180deg, transparent, rgba(4, 4, 7, 0.88));
+    display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  }
+  .gal-item figcaption b { font-size: 15px; font-weight: 800; letter-spacing: 0.04em; }
+  .gal-item figcaption span { font-size: 12px; color: var(--muted); }
+
+  /* ---------- 评价墙 ---------- */
+  .praise-wrap { overflow: hidden; max-width: none; padding-left: 0; padding-right: 0; }
+  .praise-head { max-width: 1180px; margin: 0 auto; padding: 0 clamp(20px, 6vw, 72px); }
+  .marquee { display: flex; gap: 18px; width: max-content; padding: 40px 0 10px; animation: scroll-x 46s linear infinite; }
+  .marquee.rev { animation: scroll-x-r 52s linear infinite; padding-top: 0; padding-bottom: 20px; }
+  .marquee:hover, .marquee.rev:hover { animation-play-state: paused; }
+  @keyframes scroll-x { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+  @keyframes scroll-x-r { from { transform: translateX(-50%); } to { transform: translateX(0); } }
+  .p-card {
+    width: 320px; flex-shrink: 0; padding: 26px 26px 22px;
+    border-radius: var(--radius); background: var(--card); border: 1px solid var(--line);
+  }
+  .p-card .stars { color: #fbbf24; font-size: 13px; letter-spacing: 3px; margin-bottom: 14px; }
+  .p-card q { display: block; font-size: 14px; line-height: 1.9; color: var(--fg); quotes: "“" "”"; margin-bottom: 16px; }
+  .p-card .who { font-size: 12px; color: var(--muted); letter-spacing: 0.08em; }
+
+  /* ---------- 下载 ---------- */
+  .dl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); justify-content: center; gap: 16px; max-width: 920px; margin: 40px auto 0; }
+  .dl-card {
+    position: relative; padding: 24px 26px; border-radius: 20px; overflow: hidden;
+    background: var(--card); border: 1px solid var(--line);
+    transition: transform 0.3s, border-color 0.3s;
+  }
+  .dl-card:hover { transform: translateY(-4px); border-color: rgba(45, 212, 191, 0.4); }
+  .dl-card.main { background: linear-gradient(150deg, rgba(167, 139, 250, 0.14), rgba(45, 212, 191, 0.08)), var(--card); }
+  .dl-card.android { background: linear-gradient(150deg, rgba(61, 220, 132, 0.13), rgba(45, 212, 191, 0.07)), var(--card); }
+  .dl-card.android:hover { border-color: rgba(61, 220, 132, 0.45); }
+  .dl-card.android .dl-os-ico { color: #7be8a6; background: rgba(61, 220, 132, 0.13); }
+  .dl-card.android .dl-head-t .os { color: #58db92; }
+  .dl-card.android .btn.primary { background: linear-gradient(120deg, #32d583, #22c55e); }
+  .dl-card.android .btn.wip { background: rgba(255, 255, 255, 0.06); color: var(--muted); cursor: default; box-shadow: none; }
+  .dl-card.android .btn.wip:hover { transform: none; box-shadow: none; }
+  .dl-card .rec.wip { background: linear-gradient(120deg, #f4b860, #f49f5a); }
+  .dl-card .rec.new { background: linear-gradient(120deg, #32d583, #2dd4bf); }
+  .dl-alt { grid-column: 1 / -1; }
+  .dl-mirror { margin-top: 4px; text-align: center; font-size: 11px; line-height: 1.65; color: var(--muted); opacity: 0.8; }
+  .dl-mirror a { color: var(--accent2); text-decoration: none; border-bottom: 1px dashed rgba(45,212,191,0.5); }
+  .dl-mirror a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  .dl-head { display: flex; align-items: center; gap: 12px; margin-bottom: 15px; }
+  .dl-os-ico {
+    width: 42px; height: 42px; flex: none; border-radius: 11px; display: grid; place-items: center;
+    color: var(--fg); background: rgba(167, 139, 250, 0.14); border: 1px solid var(--line);
+  }
+  .dl-os-ico svg { width: 20px; height: 20px; }
+  .dl-head-t .os { font-size: 10.5px; font-weight: 700; letter-spacing: 0.22em; color: var(--accent2); margin-bottom: 4px; }
+  .dl-head-t h4 { font-size: 19px; font-weight: 800; margin: 0; }
+  .dl-meta { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 16px; }
+  .dl-meta .chip {
+    font-size: 11.5px; color: var(--muted); padding: 4px 11px; border-radius: 999px;
+    background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line);
+  }
+  .dl-main { width: 100%; justify-content: center; gap: 9px; padding: 12px 20px; font-size: 14.5px; font-weight: 800; }
+  .dl-main svg { width: 16px; height: 16px; transition: transform 0.25s; }
+  .dl-main:hover svg { transform: translateY(3px); }
+  .dl-note { display: flex; align-items: center; justify-content: center; gap: 7px; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .dl-note svg { width: 13px; height: 13px; flex: none; stroke: var(--accent2); }
+  .dl-tip { margin-top: 4px; text-align: center; font-size: 11px; line-height: 1.65; color: var(--muted); opacity: 0.65; }
+  .dl-card .rec {
+    position: absolute; top: 18px; right: 18px;
+    font-size: 10.5px; letter-spacing: 0.14em; padding: 5px 12px; border-radius: 999px;
+    background: var(--grad); color: #0a0a0c; font-weight: 700;
+  }
+  .steps { margin-top: 40px; }
+  .steps h3 { font-size: 14.5px; font-weight: 700; margin-bottom: 30px; text-align: center; }
+  .steps ol {
+    list-style: none; position: relative;
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px;
+    max-width: 920px; margin: 0 auto;
+  }
+  /* 桌面：图标之间一条渐变虚线串联，表达安装顺序 */
+  .steps ol::before {
+    content: ""; position: absolute; z-index: 0;
+    top: 24px; left: 12.5%; right: 12.5%; height: 1px;
+    background: repeating-linear-gradient(90deg, rgba(167, 139, 250, 0.45) 0 6px, transparent 6px 13px);
+  }
+  .steps li { position: relative; z-index: 1; text-align: center; }
+  .st-ico {
+    width: 48px; height: 48px; margin: 0 auto 13px; border-radius: 14px;
+    display: grid; place-items: center;
+    color: var(--accent2);
+    background: linear-gradient(150deg, rgba(167, 139, 250, 0.20), rgba(45, 212, 191, 0.12)), #0c0d13;
+    border: 1px solid var(--line);
+    transition: transform 0.25s, border-color 0.25s, box-shadow 0.25s;
+  }
+  .st-ico svg { width: 22px; height: 22px; }
+  .steps li:hover .st-ico {
+    transform: translateY(-3px); border-color: rgba(45, 212, 191, 0.45);
+    box-shadow: 0 10px 26px rgba(45, 212, 191, 0.16);
+  }
+  .st-t { display: block; font-size: 13.5px; font-weight: 700; color: var(--fg); margin-bottom: 6px; }
+  .st-d { display: block; font-size: 12px; color: var(--muted); line-height: 1.75; }
+  .steps code {
+    font-family: "Cascadia Code", Consolas, monospace; font-size: 11px;
+    background: rgba(167, 139, 250, 0.12); padding: 2px 6px; border-radius: 5px; color: var(--accent);
+  }
+
+  /* ---------- 打赏 ---------- */
+  .donate-grid { display: flex; gap: 22px; justify-content: center; margin-top: 46px; flex-wrap: wrap; }
+  .donate-card {
+    width: 236px; padding: 16px 16px 14px; border-radius: var(--radius);
+    background: #fff; text-align: center;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: transform 0.35s cubic-bezier(0.2, 0.7, 0.3, 1), box-shadow 0.35s;
+  }
+  .donate-card:hover { transform: translateY(-6px); box-shadow: 0 26px 60px rgba(0, 0, 0, 0.45), 0 0 50px rgba(167, 139, 250, 0.14); }
+  .donate-card img { width: 100%; border-radius: 12px; }
+  .donate-card .plat { margin-top: 13px; font-size: 13.5px; font-weight: 700; color: #141418; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .plat .sw { width: 10px; height: 10px; border-radius: 3px; }
+  .sw-wx { background: #07c160; }
+  .sw-ali { background: #1677ff; }
+
+  /* ---------- 关注公众号（独立板块） ---------- */
+  .follow-wrap { display: flex; justify-content: center; margin-top: 46px; }
+  .follow-card {
+    width: 268px; padding: 18px 18px 16px; border-radius: var(--radius);
+    background: #fff; text-align: center;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+    transition: transform 0.35s cubic-bezier(0.2, 0.7, 0.3, 1), box-shadow 0.35s;
+  }
+  .follow-card:hover { transform: translateY(-6px); box-shadow: 0 26px 60px rgba(0, 0, 0, 0.45), 0 0 50px rgba(7, 193, 96, 0.18); }
+  .follow-card img { width: 100%; border-radius: 12px; display: block; }
+  .follow-plat { margin-top: 14px; font-size: 14px; font-weight: 700; color: #141418; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .follow-tip { margin-top: 6px; font-size: 12px; color: #6b6b76; }
+
+  /* ---------- 下载备用通道（卡片外独立区块） ---------- */
+  .dl-alt { text-align: center; }
+  .dl-alt-t { display: block; text-align: center; font-size: 11.5px; letter-spacing: 0.04em; color: var(--muted); opacity: 0.75; margin-bottom: 9px; }
+  .dl-alt-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .dl-alt-link {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px; border-radius: 12px;
+    background: rgba(255, 255, 255, 0.03); border: 1px solid var(--line);
+    color: var(--fg); font-size: 12.5px; text-decoration: none;
+    transition: border-color 0.2s, background 0.2s, transform 0.2s;
+  }
+  .dl-alt-link:hover { transform: translateY(-1px); border-color: rgba(45, 212, 191, 0.35); background: rgba(45, 212, 191, 0.06); }
+  .dl-alt-link .dl-alt-name { font-weight: 600; white-space: nowrap; }
+  .dl-alt-link .dl-alt-extra {
+    margin-left: auto; display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11px; color: var(--muted); white-space: nowrap;
+  }
+  .dl-alt-link .dl-alt-extra code {
+    font-family: "Cascadia Code", Consolas, monospace; font-size: 11px; letter-spacing: 0.08em;
+    background: rgba(167, 139, 250, 0.14); color: var(--accent); padding: 1px 6px; border-radius: 5px;
+  }
+  .dl-alt-link svg { width: 13px; height: 13px; flex: none; stroke: var(--muted); transition: stroke 0.2s; }
+  .dl-alt-link:hover svg { stroke: var(--accent2); }
+
+  /* ---------- 版权与免责声明 ---------- */
+  .legal { text-align: center; }
+  .legal-grid {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px;
+    margin-top: 46px; text-align: left;
+  }
+  .legal-item {
+    padding: 26px 26px 24px; border-radius: var(--radius);
+    background: var(--card); border: 1px solid var(--line);
+    transition: background 0.3s, border-color 0.3s;
+  }
+  .legal-item:hover { background: var(--card-hover); border-color: rgba(167, 139, 250, 0.28); }
+  .legal-item h4 {
+    font-size: 15px; font-weight: 700; margin-bottom: 11px;
+    display: flex; align-items: center; gap: 9px;
+  }
+  .legal-item h4::before {
+    content: ""; width: 4px; height: 15px; border-radius: 2px;
+    background: var(--grad); flex-shrink: 0;
+  }
+  .legal-item p { font-size: 13px; color: var(--muted); line-height: 1.95; }
+  .legal-contact { margin-top: 32px; font-size: 12.5px; color: var(--muted); }
+  .legal-contact a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+
+  /* ---------- 页脚 ---------- */
+  footer {
+    position: relative; z-index: 1;
+    border-top: 1px solid var(--line);
+    padding: 44px clamp(20px, 6vw, 72px);
+    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 18px;
+    color: var(--muted); font-size: 12.5px; letter-spacing: 0.06em;
+  }
+  footer .f-links { display: flex; gap: 22px; }
+  footer a:hover { color: var(--fg); }
+
+  /* ---------- 响应式 ---------- */
+  @media (max-width: 900px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .feat, .feat.flip { grid-template-columns: 1fr; }
+    .feat.flip .feat-text { order: 0; }
+    .grid-cards { grid-template-columns: 1fr; }
+    .gal-grid { grid-template-columns: 1fr; }
+    .dl-grid { grid-template-columns: 1fr; }
+    .dl-card { padding: 22px 18px 20px; }
+    .dl-alt-row { grid-template-columns: 1fr; }
+    .legal-grid { grid-template-columns: 1fr; }
+    .nav-links .hide-m { display: none; }
+    /* 安装步骤：平板 2×2，去掉横向连接线 */
+    .steps ol { grid-template-columns: repeat(2, 1fr); gap: 28px 20px; }
+    .steps ol::before { display: none; }
+  }
+  @media (max-width: 560px) {
+    /* 手机：单列时间线，图标在左、文案在右，左侧竖线串联 */
+    .steps h3 { margin-bottom: 22px; }
+    .steps ol { grid-template-columns: 1fr; gap: 0; max-width: 420px; }
+    .steps ol::before {
+      display: block; top: 12px; bottom: 12px; left: 23px; right: auto; width: 1px; height: auto;
+      background: repeating-linear-gradient(180deg, rgba(167, 139, 250, 0.45) 0 6px, transparent 6px 13px);
+    }
+    .steps li { display: flex; align-items: flex-start; gap: 14px; text-align: left; padding: 10px 0; }
+    .st-ico { width: 46px; height: 46px; margin: 0; flex: none; }
+  }
+
+  /* ---------- 鼠标跟随粒子画布 ---------- */
+  #fx-canvas { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+  @media (prefers-reduced-motion: reduce) { #fx-canvas { display: none; } }
+
+  /* ---------- 导航：公众号悬停/点击二维码 ---------- */
+  .nav-mp { position: relative; display: inline-flex; }
+  .nav-mp-btn {
+    appearance: none; border: 0; background: transparent; cursor: pointer;
+    color: var(--muted); font: inherit; font-size: 13.5px; padding: 4px 0;
+    transition: color 0.2s;
+  }
+  .nav-mp-btn:hover, .nav-mp.open .nav-mp-btn { color: var(--fg); }
+  .mp-pop {
+    position: absolute; top: calc(100% + 16px); right: -22px;
+    width: 226px; padding: 12px; border-radius: 16px;
+    background: rgba(16, 16, 22, 0.94); border: 1px solid var(--line);
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.62), 0 0 44px rgba(167, 139, 250, 0.14);
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    opacity: 0; visibility: hidden; transform: translateY(-8px) scale(0.96);
+    transition: opacity 0.22s ease, transform 0.22s ease, visibility 0.22s;
+  }
+  .mp-pop::before {
+    content: ""; position: absolute; top: -7px; right: 28px; width: 14px; height: 14px;
+    background: rgba(16, 16, 22, 0.94);
+    border-left: 1px solid var(--line); border-top: 1px solid var(--line);
+    transform: rotate(45deg);
+  }
+  .nav-mp:hover .mp-pop, .nav-mp:focus-within .mp-pop, .nav-mp.open .mp-pop {
+    opacity: 1; visibility: visible; transform: none;
+  }
+  .mp-pop img { width: 100%; border-radius: 10px; }
+  .mp-pop span { display: block; text-align: center; font-size: 11px; color: var(--muted); margin-top: 9px; letter-spacing: 0.06em; }
+
+  /* ---------- 聚合搜索：两张放大的实拍截图 ---------- */
+  .feat-duo { margin-bottom: clamp(70px, 9vw, 120px); }
+  .duo-grid { display: grid; gap: clamp(20px, 3vw, 38px); }
+  .duo-grid figure {
+    border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line);
+    background: #0a0a0e; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+    transition: transform 0.6s cubic-bezier(0.2, 0.7, 0.3, 1), box-shadow 0.6s;
+  }
+  .duo-grid figure:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 32px 96px rgba(0, 0, 0, 0.62), 0 0 54px rgba(167, 139, 250, 0.12);
+  }
+  .duo-grid img { width: 100%; }
+  .duo-grid figcaption {
+    padding: 14px 18px; font-size: 12.5px; color: var(--muted); text-align: center;
+    letter-spacing: 0.03em; border-top: 1px solid var(--line); line-height: 1.7;
+  }
+  .duo-grid figcaption b { color: var(--fg); font-weight: 700; margin-right: 8px; }
+
+  /* ---------- 悬浮回到顶部 ---------- */
+  #toTop {
+    position: fixed; right: 26px; bottom: 26px; z-index: 90;
+    width: 48px; height: 48px; border-radius: 50%;
+    border: 1px solid var(--line); cursor: pointer;
+    background: rgba(18, 18, 24, 0.72); color: var(--fg);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    font-size: 19px; line-height: 1; display: grid; place-items: center;
+    opacity: 0; visibility: hidden; transform: translateY(12px);
+    transition: opacity 0.25s, transform 0.25s, visibility 0.25s, background 0.25s;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  }
+  #toTop.show { opacity: 1; visibility: visible; transform: none; }
+  #toTop:hover { background: var(--grad); color: #0a0a0c; }
+
+  /* ---------- 页脚 GitHub 按钮 ---------- */
+  .gh-btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 16px; border-radius: 999px; border: 1px solid var(--line);
+    background: var(--card); color: var(--fg); font-size: 12.5px;
+    transition: transform 0.25s, background 0.25s;
+  }
+  .gh-btn:hover { transform: translateY(-2px); background: var(--card-hover); color: var(--fg); }
+  .gh-btn svg { width: 16px; height: 16px; fill: currentColor; flex: none; }
+</style>
+</head>
+<body>
+
+<!-- ================= 启动动效 ================= -->
+<div id="intro">
+  <div class="in-galaxy"><i></i></div>
+  <div class="in-orbit"><div class="in-orbit-r"><i class="o1"></i><i class="o2"></i><i class="o3"></i></div></div>
+  <div class="in-stars">
+    <i style="--x:14%;--y:24%;--d:0.05s;--ty:26px"></i>
+    <i style="--x:24%;--y:66%;--d:0.2s;--c:#a78bfa;--s:2.4px;--tx:-14px"></i>
+    <i style="--x:36%;--y:18%;--d:0.32s;--ty:22px"></i>
+    <i style="--x:47%;--y:78%;--d:0.12s;--c:#5eead4;--tx:12px"></i>
+    <i style="--x:58%;--y:14%;--d:0.4s;--s:1.5px;--ty:30px"></i>
+    <i style="--x:68%;--y:60%;--d:0.26s;--c:#a78bfa;--tx:16px;--ty:-18px"></i>
+    <i style="--x:79%;--y:30%;--d:0.5s;--s:2.6px"></i>
+    <i style="--x:88%;--y:70%;--d:0.16s;--c:#5eead4;--s:1.5px;--tx:14px;--ty:-22px"></i>
+    <i style="--x:8%;--y:52%;--d:0.45s;--s:1.6px;--tx:-16px"></i>
+    <i style="--x:52%;--y:34%;--d:0.6s;--s:1.4px;--ty:-24px"></i>
+    <i style="--x:31%;--y:86%;--d:0.55s;--c:#e9d5ff;--tx:-10px;--ty:-16px"></i>
+    <i style="--x:73%;--y:86%;--d:0.35s;--s:1.8px;--ty:-26px"></i>
+  </div>
+  <div class="in-halo"></div>
+  <div class="intro-inner">
+    <div class="intro-logo"><span class="i-l" style="--i:0">律</span><span class="i-l" style="--i:1">动</span><span class="i-l" style="--i:2">&nbsp;</span><span class="i-l g" style="--i:3">R</span><span class="i-l g" style="--i:4">h</span><span class="i-l g" style="--i:5">y</span><span class="i-l g" style="--i:6">t</span><span class="i-l g" style="--i:7">h</span><span class="i-l g" style="--i:8">m</span><span class="i-l g" style="--i:9">V</span><span class="i-l g" style="--i:10">i</span><span class="i-l g" style="--i:11">z</span></div>
+    <div class="intro-sub">音乐有形 · 律动可见</div>
+    <div class="intro-line"><i></i></div>
+  </div>
+</div>
+
+<div class="glow glow-a"></div>
+<div class="glow glow-b"></div>
+<div class="glow glow-c"></div>
+<div class="starfield"></div>
+<div class="starfield-b"></div>
+<div class="aurora-band"></div>
+<canvas id="fx-canvas" aria-hidden="true"></canvas>
+
+<!-- ================= 导航 ================= -->
+<nav id="top">
+  <a class="brand" href="#top"><span class="dot">律</span>律动 RhythmViz</a>
+  <div class="nav-links">
+    <a href="#features" class="hide-m">功能</a>
+    <a href="#visual" class="hide-m">视觉</a>
+    <a href="#praise" class="hide-m">评价</a>
+    <a href="#download" class="hide-m">下载</a>
+    <span class="nav-mp">
+      <button class="nav-mp-btn" type="button" aria-haspopup="true" aria-expanded="false">公众号</button>
+      <span class="mp-pop" role="dialog" aria-label="公众号二维码">
+        <img src="shots/wechat-mp.jpg" alt="律动 RhythmViz 微信公众号二维码" loading="lazy" decoding="async">
+        <span>微信扫码关注 · 版本更新不错过</span>
+      </span>
+    </span>
+    <a href="#download" class="btn primary nav-cta">立即下载</a>
+  </div>
+</nav>
+
+<main>
+
+  <!-- ================= Hero ================= -->
+  <section class="hero">
+    <div class="hero-tags reveal">
+      <span>WINDOWS 桌面端</span><span>QQ 音乐 × 网易云</span><span>免费 · 无广告</span>
+    </div>
+    <h1 class="reveal">音乐有形，<br><span class="grad">律动可见。</span></h1>
+    <p class="sub reveal">聚合搜索、双源歌单与沉浸式视觉动效，安静地收进同一个播放器。</p>
+    <div class="hero-cta reveal">
+      <a href="#download" class="btn primary">免费下载 ↓</a>
+      <a href="#features" class="btn">了解功能 →</a>
+    </div>
+    <div class="hero-note reveal">双音源 · 扫码登录 · 歌单同步 · 银河视觉</div>
+    <div class="hero-shot reveal">
+      <img src="shots/home.png" alt="律动 RhythmViz 主界面" fetchpriority="high" decoding="async">
+    </div>
+  </section>
+
+  <!-- ================= 数据条 ================= -->
+  <section class="stats reveal">
+    <div class="stat"><b>2 大音源</b><span>QQ 音乐 · 网易云 聚合搜索</span></div>
+    <div class="stat"><b>¥0</b><span>免费使用 · 无广告 · 无内购</span></div>
+    <div class="stat"><b>1 键登录</b><span>官方扫码 · 歌单自动同步</span></div>
+    <div class="stat"><b>N 种视觉</b><span>银河启动特效 · 主题色自定义</span></div>
+  </section>
+
+  <!-- ================= 核心功能 ================= -->
+  <section id="features">
+    <span class="kicker reveal">FEATURES · 核心功能</span>
+    <h2 class="sec-title reveal">想听什么，<br>一个搜索框就够。</h2>
+    <p class="sec-sub reveal" style="margin-bottom: clamp(50px, 7vw, 90px);">不用再来回切 App。搜一次，两个曲库的结果一起回来。</p>
+
+    <div class="feat-duo reveal">
+      <div class="feat-text" style="text-align: center; max-width: 720px; margin: 0 auto clamp(30px, 4vw, 48px);">
+        <h3>聚合搜索 · 双曲库同屏</h3>
+        <p>输入歌名或歌手，QQ 音乐与网易云的结果同时呈现，按源分组一目了然。哪边有版权听哪边，灰色歌单从此是路人。</p>
+        <div class="feat-tags" style="justify-content: center;"><span>双源并发</span><span>结果分组</span><span>回车即播</span></div>
+      </div>
+      <div class="duo-grid">
+        <figure>
+          <img src="shots/search.png" alt="聚合搜索：QQ音乐与网易云结果同屏" loading="lazy" decoding="async">
+          <figcaption><b>聚合搜索</b>一次输入 · QQ音乐 / 网易云结果同屏分组</figcaption>
+        </figure>
+        <figure>
+          <img src="shots/drawer-local.png" alt="首页搜索框与我的歌单面板" loading="lazy" decoding="async">
+          <figcaption><b>想听什么</b>首页一个搜索框就够 · 我的歌单侧滑即达</figcaption>
+        </figure>
+      </div>
+    </div>
+
+    <div class="feat flip reveal">
+      <div class="feat-text">
+        <h3>官方扫码 · 安全登录</h3>
+        <p>走 QQ 音乐与网易云的官方扫码通道，凭证只存在你自己的电脑上。登录后账号歌单自动同步进来，VIP 歌曲照常解锁。</p>
+        <div class="feat-tags"><span>官方 OAuth 流程</span><span>本地存储凭证</span><span>昵称头像回显</span></div>
+      </div>
+      <div class="feat-shot" style="display: grid; place-items: center; padding: 26px 0; background: #08080c;">
+        <img src="shots/qrcode.png" alt="扫码登录" loading="lazy" decoding="async" style="width: auto; max-width: 72%; border-radius: 14px; border: 1px solid var(--line);">
+      </div>
+    </div>
+
+    <div class="feat reveal">
+      <div class="feat-text">
+        <h3>我的歌单 · 按需切换</h3>
+        <p>登录几个平台，歌单就同步几个平台。点一下单选按钮，「我的歌单」即刻整组切换——当前只看网易云，下一刻只看 QQ，互不打扰。</p>
+        <div class="feat-tags"><span>歌单云同步</span><span>单平台过滤</span><span>两行紧凑视图</span></div>
+      </div>
+      <div class="feat-shot">
+        <img src="shots/playlist.png" alt="我的歌单" loading="lazy" decoding="async">
+      </div>
+    </div>
+
+    <div class="feat flip reveal">
+      <div class="feat-text">
+        <h3>本地曲库 · 整包导入</h3>
+        <p>设置中心一键导入整个文件夹（含子目录），自动读取封面与元数据。导入的本地歌曲置顶显示在「我的歌单」，与在线收藏并排陈列，点开即播。</p>
+        <div class="feat-tags"><span>文件夹批量导入</span><span>封面 · 元数据解析</span><span>我的歌单置顶</span></div>
+      </div>
+      <div class="feat-shot">
+        <img src="shots/mypl-local.png" alt="本地曲库导入" loading="lazy" decoding="async">
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 视觉 ================= -->
+  <section id="visual" style="padding-top: 0;">
+    <span class="kicker reveal">VISUAL · 视觉</span>
+    <h2 class="sec-title reveal">开屏三秒，<br>也值得认真做。</h2>
+    <p class="sec-sub reveal" style="margin-bottom: 50px;">银河启动特效：星光汇聚成字，辉光沿字序呼吸明灭，一道流光周期性扫过品牌名。九种预设主题色板，虹彩起点随你选的颜色展开。</p>
+    <div class="feat-shot reveal" style="border-radius: 24px;">
+      <img src="shots/splash.png" alt="银河启动特效" loading="lazy" decoding="async">
+    </div>
+
+    <div class="gal-head reveal">
+      <h3>播放的每一秒，都有画面。</h3>
+      <p>以下全部为软件内真实截图 —— 歌单拼图、歌词动画与 3D 可视化场景，随音乐实时驱动。</p>
+    </div>
+    <div class="gal-grid">
+      <figure class="gal-item wide reveal">
+        <img src="shots/folia.gif" alt="歌单拼图" loading="lazy">
+        <figcaption><b>歌单拼图</b><span>Folia 式封面拼贴 · 正在播放的封面居中放大，封面内直接控制播放</span></figcaption>
+      </figure>
+      <figure class="gal-item reveal">
+        <img src="shots/lyric-mv.gif" alt="歌词MV" loading="lazy">
+        <figcaption><b>歌词 MV</b><span>歌词动画 · 文字 MV，24 种动画 × 6 种背景</span></figcaption>
+      </figure>
+      <figure class="gal-item reveal">
+        <img src="shots/reactor.gif" alt="3D反应堆" loading="lazy">
+        <figcaption><b>3D 反应堆</b><span>Three.js 音频地形 · 鼓点涟漪与夜空流星</span></figcaption>
+      </figure>
+      <figure class="gal-item reveal">
+        <img src="shots/wxchat.gif" alt="微信对话" loading="lazy">
+        <figcaption><b>微信对话</b><span>歌词变成聊天记录 · 我一句对面一句逐字打出</span></figcaption>
+      </figure>
+      <figure class="gal-item reveal">
+        <img src="shots/collide.gif" alt="流星碰撞" loading="lazy">
+        <figcaption><b>流星碰撞</b><span>陨石环绕 · 3D 碎块随节拍爆炸</span></figcaption>
+      </figure>
+    </div>
+
+    <div class="grid-cards">
+      <div class="g-card reveal">
+        <div class="ico">✦</div>
+        <h4>银河特效</h4>
+        <p>静字流光：星光汇聚入场，辉光错峰明灭，柔光周期性扫过字面——与普通的波浪动效截然不同。</p>
+      </div>
+      <div class="g-card reveal">
+        <div class="ico">◐</div>
+        <h4>主题色自定义</h4>
+        <p>内置色板 + 自定义取色，启动页、标题虹彩、全局强调色一起联动，你的播放器你的颜色。</p>
+      </div>
+      <div class="g-card reveal">
+        <div class="ico">∿</div>
+        <h4>沉浸播放</h4>
+        <p>播放条、进度、控制一体成型的底部控制条，封面光晕随专辑主色呼吸，听歌也有氛围感。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 评价 ================= -->
+  <section id="praise" class="praise-wrap">
+    <div class="praise-head">
+      <span class="kicker reveal">PRAISE · 来自用户</span>
+      <h2 class="sec-title reveal">用过的人，<br>都留了下来。</h2>
+    </div>
+    <div class="marquee">
+      <div class="p-card"><div class="stars">★★★★★</div><q>双源搜索太爽了，再也不用来回切两个 App 找歌。</q><div class="who">网易云重度用户</div></div>
+      <div class="p-card"><div class="stars">★★★★★</div><q>启动页那个银河特效，每次开软件都要多看两秒。</q><div class="who">颜控党</div></div>
+      <div class="p-card"><div class="stars">★★★★★</div><q>扫码登录之后歌单直接同步过来，搬家成本为零。</q><div class="who">QQ 音乐老用户</div></div>
+      <div class="p-card"><div class="stars">★★★★★</div><q>界面干净，没有广告，这才是一个播放器该有的样子。</q><div class="who">极简主义爱好者</div></div>
+      <div class="p-card"><div class="stars">★★★★★</div><q>双源搜索太爽了，再也不用来回切两个 App 找歌。</q><div class="who">网易云重度用户</div></div>
+      <div class="p-card"><div class="stars">★★★★★</div><q>启动页那个银河特效，每次开软件都要多看两秒。</q><div class="who">颜控党</div></div>
+      <div class="p-card"><div class="stars">★★★★★</div><q>扫码登录之后歌单直接同步过来，搬家成本为零。</q><div class="who">QQ 音乐老用户</div></div>
+      <div class="p-card"><div class="stars">★★★★★</div><q>界面干净，没有广告，这才是一个播放器该有的样子。</q><div class="who">极简主义爱好者</div></div>
+    </div>
+    <div class="marquee rev">
+      <div class="p-card"><div class="stars">★★★★★</div><q>歌单两行视图很克制，一屏能放下热歌榜和推荐。</q><div class="who">效率控</div></div>
+      <div class="p-card"><div class="stars">★★★★★</div><q>主题色能自己调，紫色虹彩标题真的好看。</q><div class="who">美化折腾党</div></div>
+      <div class="p-card"><div class="stars">★★★★★</div><q>装完就把其他播放器图标拖进文件夹吃灰了。</q><div class="who">桌面整理癖</div></div>
+      <div class="p-card"><div class="stars">★★★★★</div><q>免费还无内购，作者简直是做慈善。</q><div class="who">白嫖快乐人</div></div>
+      <div class="p-card"><div class="stars">★★★★★</div><q>歌单两行视图很克制，一屏能放下热歌榜和推荐。</q><div class="who">效率控</div></div>
+      <div class="p-card"><div class="stars">★★★★★</div><q>主题色能自己调，紫色虹彩标题真的好看。</q><div class="who">美化折腾党</div></div>
+      <div class="p-card"><div class="stars">★★★★★</div><q>装完就把其他播放器图标拖进文件夹吃灰了。</q><div class="who">桌面整理癖</div></div>
+      <div class="p-card"><div class="stars">★★★★★</div><q>免费还无内购，作者简直是做慈善。</q><div class="who">白嫖快乐人</div></div>
+    </div>
+  </section>
+
+  <!-- ================= 下载 ================= -->
+  <section id="download">
+    <span class="kicker reveal">DOWNLOAD · 免费下载</span>
+    <h2 class="sec-title reveal">点击，直接下载。</h2>
+    <p class="sec-sub reveal">安装包直链，点下去就开始下载——免登录、免跳转、无捆绑。</p>
+
+    <div class="dl-grid reveal">
+      <div class="dl-card main">
+        <span class="rec">● 推荐</span>
+
+        <div class="dl-head">
+          <div class="dl-os-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.4 10.4 4.3v7.2H3V5.4z"/><path d="M11.4 4.2 21 2.9v8.6h-9.6V4.2z"/><path d="M3 12.5h7.4v7.2L3 18.6v-6.1z"/><path d="M11.4 12.5H21v8.6l-9.6-1.3v-7.3z"/></svg>
+          </div>
+          <div class="dl-head-t">
+            <div class="os">WINDOWS</div>
+            <h4>Windows 10 / 11</h4>
+          </div>
+        </div>
+
+        <div class="dl-meta">
+          <span class="chip">v1.0.0 正式版</span>
+          <span class="chip">约 87 MB</span>
+          <span class="chip">EXE 安装包</span>
+        </div>
+
+        <a href="download/RhythmViz-Setup-1.0.0.exe" download class="btn primary dl-main">
+          <span>下载 RhythmViz v1.0.0</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/></svg>
+        </a>
+        <div class="dl-note">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5"/></svg>
+          国内 CDN 直链 · 点击即下 · 支持断点续传
+        </div>
+        <div class="dl-tip">备用线路：<a href="https://github.com/xinxin2344/rhythmviz/releases/download/v1.0.0/RhythmViz-Setup-1.0.0.exe" target="_blank" rel="noopener">GitHub 直链</a> · <a href="https://wwavc.lanzoue.com/iSV5w4c780yb" target="_blank" rel="noopener">蓝奏云（提取码 i86k）</a></div>
+      </div>
+
+      <div class="dl-card android">
+        <span class="rec new">● NEW</span>
+
+        <div class="dl-head">
+          <div class="dl-os-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.6 9.48l1.84-3.18c.16-.31.04-.69-.26-.85-.29-.15-.65-.06-.83.22l-1.88 3.24c-2.86-1.21-6.08-1.21-8.94 0L5.65 5.67c-.19-.29-.58-.38-.87-.2-.28.18-.37.54-.22.83L6.4 9.48C3.3 11.25 1.28 14.44 1 18h22c-.28-3.56-2.3-6.75-5.4-8.52zM7 15.25a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5zm10 0a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5z"/></svg>
+          </div>
+          <div class="dl-head-t">
+            <div class="os">ANDROID</div>
+            <h4>Android 5.1 及以上</h4>
+          </div>
+        </div>
+
+        <div class="dl-meta">
+          <span class="chip">v1.1.4 正式版</span>
+          <span class="chip">约 7 MB</span>
+          <span class="chip">APK 直装包</span>
+        </div>
+
+        <a href="download/RhythmViz-1.1.4.apk" download class="btn primary dl-main">
+          <span>下载 RhythmViz v1.1.4</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/></svg>
+        </a>
+        <div class="dl-note">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5"/></svg>
+          香港直链 · 点击即下 · 音源已内置、打开即用
+        </div>
+        <div class="dl-mirror">网易云式竖屏布局 · 返回键逐级返回 · QQ 一键登录；安装时如提示风险，选择「仍要安装 / 继续安装」即可。</div>
+      </div>
+
+      <div class="dl-alt">
+        <span class="dl-alt-t">直连速度不理想？试试备用通道</span>
+        <div class="dl-alt-row">
+          <a class="dl-alt-link" href="https://wwavc.lanzoue.com/iSV5w4c780yb" target="_blank" rel="noopener">
+            <span class="dl-alt-name">蓝奏云网盘</span>
+            <span class="dl-alt-extra">提取码 <code>i86k</code></span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7"/><path d="M8.5 7H17v8.5"/></svg>
+          </a>
+          <a class="dl-alt-link" href="https://ghproxy.net/https://github.com/xinxin2344/rhythmviz/releases/download/v1.0.0/RhythmViz-Setup-1.0.0.exe" target="_blank" rel="noopener">
+            <span class="dl-alt-name">国内加速镜像</span>
+            <span class="dl-alt-extra">GitHub 加速线</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7"/><path d="M8.5 7H17v8.5"/></svg>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <div class="steps reveal">
+      <h3>Windows 四步上手</h3>
+      <ol>
+        <li>
+          <span class="st-ico">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/></svg>
+          </span>
+          <span class="st-t">下载并运行</span>
+          <span class="st-d">下载 <code>RhythmViz-Setup-1.0.0.exe</code>，双击启动安装向导</span>
+        </li>
+        <li>
+          <span class="st-ico">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8.5 12.2l2.3 2.3 4.7-5"/></svg>
+          </span>
+          <span class="st-t">勾选音源</span>
+          <span class="st-d">组件页按需勾选 QQ 音乐 / 网易云，默认全选</span>
+        </li>
+        <li>
+          <span class="st-ico">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h6v6H4z"/><path d="M14 4h6v6h-6z"/><path d="M4 14h6v6H4z"/><path d="M14 14h2.5v2.5H14z"/><path d="M17.5 17.5H20V20h-2.5z"/></svg>
+          </span>
+          <span class="st-t">扫码登录</span>
+          <span class="st-d">首次打开点右上角「登录」，App 扫码自动同步歌单</span>
+        </li>
+        <li>
+          <span class="st-ico">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.6-3 7.6-7 9-4-1.4-7-4.4-7-9V6z"/><path d="M9 11.8l2.2 2.2L15.5 9.5"/></svg>
+          </span>
+          <span class="st-t">安全放行</span>
+          <span class="st-d">提示未知发布者时选「仍要运行」，免费无捆绑</span>
+        </li>
+      </ol>
+      <p style="margin: 26px auto 0; max-width: 680px; text-align: center; font-size: 12.5px; line-height: 1.8; color: var(--muted);">
+        <span style="color: #58db92; font-weight: 700; letter-spacing: 0.08em;">ANDROID 用户：</span>
+        安卓 v1.1.4 已上线，手机浏览器直接点击上方 APK 按钮下载安装即可（音源已内置、打开即用）；版本更新会在公众号第一时间通知。
+      </p>
+    </div>
+  </section>
+
+  <!-- ================= 关注公众号 ================= -->
+  <section id="follow" style="text-align: center;">
+    <span class="kicker reveal">FOLLOW · 关注更新</span>
+    <h2 class="sec-title reveal">关注公众号，新版本不错过。</h2>
+    <p class="sec-sub reveal" style="margin: 0 auto;">安卓版与电脑版的每次更新、新视觉场景和使用技巧，都会在公众号第一时间推送——微信扫一扫即可关注。</p>
+    <div class="follow-wrap reveal">
+      <div class="follow-card">
+        <img src="shots/wechat-mp.jpg" alt="律动 RhythmViz 微信公众号二维码" loading="lazy" decoding="async">
+        <div class="follow-plat"><span class="sw sw-wx"></span>微信公众号 · 律动 RhythmViz</div>
+        <div class="follow-tip">微信扫码关注 · 获取版本更新通知</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 打赏 ================= -->
+  <section id="donate" style="text-align: center;">
+    <span class="kicker reveal">DONATE · 打赏支持</span>
+    <h2 class="sec-title reveal">请作者喝杯咖啡。</h2>
+    <p class="sec-sub reveal" style="margin: 0 auto;">RhythmViz 完全免费、无广告、无捆绑。如果它让你的桌面多一点律动，欢迎投喂——这是支持持续开发的全部方式。</p>
+    <div class="donate-grid reveal">
+      <div class="donate-card">
+        <img src="shots/donate-wechat.png" alt="微信打赏收款码" loading="lazy" decoding="async">
+        <div class="plat"><span class="sw sw-wx"></span>微信打赏</div>
+      </div>
+      <div class="donate-card">
+        <img src="shots/donate-alipay.jpg" alt="支付宝打赏收款码" loading="lazy" decoding="async">
+        <div class="plat"><span class="sw sw-ali"></span>支付宝打赏</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 版权与免责声明 ================= -->
+  <section id="legal" class="legal">
+    <span class="kicker reveal">LEGAL · 版权与免责声明</span>
+    <h2 class="sec-title reveal">关于版权与音源。</h2>
+    <p class="sec-sub reveal" style="margin: 0 auto;">为避免误解，请在使用前阅读以下说明。</p>
+
+    <div class="legal-grid reveal">
+      <div class="legal-item">
+        <h4>音源归属</h4>
+        <p>RhythmViz 的音乐内容来自 QQ 音乐、网易云音乐等第三方音乐平台。所有音频、歌词、封面及艺人信息，其著作权与相关权利均归原始权利人（唱片公司、词曲作者、表演者及相应平台）所有，本软件不主张任何权利。</p>
+      </div>
+      <div class="legal-item">
+        <h4>软件定位</h4>
+        <p>RhythmViz 是一款本地音乐播放器与音频可视化工具，仅提供搜索结果的聚合展示与播放控制。软件不存储、不托管、不分发任何音频文件，也不提供下载音乐的功能——所有音频均由第三方平台在播放时提供。</p>
+      </div>
+      <div class="legal-item">
+        <h4>使用范围</h4>
+        <p>本软件完全免费，仅供个人学习、研究与技术交流使用，不得用于任何商业用途。请通过官方渠道获取音乐授权。因使用本软件产生的任何法律后果，由使用者自行承担。</p>
+      </div>
+      <div class="legal-item">
+        <h4>权利通知</h4>
+        <p>本软件与腾讯音乐娱乐集团、网易公司及其关联公司无任何隶属或合作关系。若权利人认为本软件相关内容侵犯其合法权益，请通过下方渠道联系，我们将在核实后及时处理或移除。</p>
+      </div>
+    </div>
+
+    <p class="legal-contact reveal">权利通知与侵权投诉，请发送邮件至：<a href="mailto:17783025456@163.com">17783025456@163.com</a>，我们将在核实后及时处理或移除。</p>
+  </section>
+</main>
+
+<!-- ================= 页脚 ================= -->
+<footer>
+  <span>© 2026 律动 RhythmViz · 音乐有形，律动可见</span>
+  <a class="gh-btn" href="https://github.com/xinxin2344/rhythmviz" target="_blank" rel="noopener">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+    GitHub 开源仓库
+  </a>
+  <div class="f-links">
+    <a href="#features">功能</a>
+    <a href="#download">下载</a>
+    <a href="#follow">公众号</a>
+    <a href="#donate">打赏</a>
+    <a href="#legal">版权声明</a>
+    <a href="#" id="footTop">回到顶部 ↑</a>
+  </div>
+</footer>
+
+<button id="toTop" type="button" aria-label="回到顶部">↑</button>
+
+<script>
+  /* 滚动渐入（Hero 区由启动动效统一调度，不参与 IO） */
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('on'); io.unobserve(e.target); } });
+  }, { threshold: 0.12 });
+  document.querySelectorAll('.reveal').forEach((el) => { if (!el.closest('.hero')) io.observe(el); });
+
+  /* 启动动效：星尘逐字入场后 → 遮罩淡出 → Hero 元素错峰入场 */
+  setTimeout(() => {
+    const intro = document.getElementById('intro');
+    intro.classList.add('bye');
+    document.querySelectorAll('.hero .reveal').forEach((el, i) => {
+      el.style.transitionDelay = (0.2 + i * 0.09) + 's';
+      el.classList.add('on');
+    });
+    setTimeout(() => intro.remove(), 950);
+  }, 2300);
+
+  /* Hero 主视觉视差 */
+  const shot = document.querySelector('.hero-shot');
+  addEventListener('scroll', () => {
+    const y = scrollY;
+    if (y < innerHeight) shot.style.transform = `perspective(1400px) rotateX(${4 - y / 300}deg) translateY(${y * 0.06}px)`;
+  }, { passive: true });
+
+  /* ---------- 鼠标跟随粒子：环境漂浮 + 鼠标近距牵引 + 近点连线 ---------- */
+  (function particles() {
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const fine = matchMedia('(pointer: fine)').matches;
+    const cv = document.getElementById('fx-canvas');
+    if (reduce || !cv || !cv.getContext) return;
+    const ctx = cv.getContext('2d');
+    let w = 0, h = 0, pts = [], raf = 0, running = true;
+    const mouse = { x: -9999, y: -9999 };
+    const COLORS = ['167,139,250', '45,212,191', '233,213,255'];
+    const LINK_D = 116, PULL_D = 150, PULL_D2 = PULL_D * PULL_D;
+
+    function resize() {
+      const dpr = Math.min(devicePixelRatio || 1, 1.6);
+      w = innerWidth; h = innerHeight;
+      cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+      cv.style.width = w + 'px'; cv.style.height = h + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const n = Math.min(82, Math.max(34, Math.floor(w * h / 17000)));
+      pts = Array.from({ length: n }, () => ({
+        x: Math.random() * w, y: Math.random() * h,
+        vx: (Math.random() - 0.5) * 0.32, vy: (Math.random() - 0.5) * 0.32,
+        r: Math.random() * 1.7 + 0.6,
+        c: COLORS[Math.random() < 0.58 ? 0 : (Math.random() < 0.5 ? 1 : 2)],
+        tw: Math.random() * Math.PI * 2
+      }));
+    }
+    resize();
+    addEventListener('resize', resize, { passive: true });
+    if (fine) {
+      addEventListener('pointermove', (e) => { mouse.x = e.clientX; mouse.y = e.clientY; }, { passive: true });
+      document.addEventListener('mouseleave', () => { mouse.x = mouse.y = -9999; });
+    }
+
+    function tick() {
+      if (!running) return;
+      ctx.clearRect(0, 0, w, h);
+      const t = performance.now() * 0.001;
+      for (const p of pts) {
+        if (fine && mouse.x > -9000) {
+          const dx = p.x - mouse.x, dy = p.y - mouse.y, d2 = dx * dx + dy * dy;
+          if (d2 < PULL_D2 && d2 > 0.01) {
+            const d = Math.sqrt(d2), f = (PULL_D - d) / PULL_D * 0.14;
+            p.vx += dx / d * f; p.vy += dy / d * f;
+          }
+        }
+        p.vx = Math.max(-1.3, Math.min(1.3, p.vx * 0.975));
+        p.vy = Math.max(-1.3, Math.min(1.3, p.vy * 0.975));
+        // 速度被阻尼吃光时给一点环境漂移，保证背景一直是活的
+        if (Math.abs(p.vx) < 0.06) p.vx += (Math.random() - 0.5) * 0.05;
+        if (Math.abs(p.vy) < 0.06) p.vy += (Math.random() - 0.5) * 0.05;
+        p.x += p.vx; p.y += p.vy;
+        if (p.x < -20) p.x = w + 20; else if (p.x > w + 20) p.x = -20;
+        if (p.y < -20) p.y = h + 20; else if (p.y > h + 20) p.y = -20;
+      }
+      // 粒子间连线
+      for (let i = 0; i < pts.length; i++) {
+        const a = pts[i];
+        for (let j = i + 1; j < pts.length; j++) {
+          const b = pts[j];
+          const dx = a.x - b.x, dy = a.y - b.y, d2 = dx * dx + dy * dy;
+          if (d2 < LINK_D * LINK_D) {
+            const al = (1 - Math.sqrt(d2) / LINK_D) * 0.16;
+            ctx.strokeStyle = `rgba(${a.c},${al})`;
+            ctx.lineWidth = 0.7;
+            ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+          }
+        }
+      }
+      // 粒子本体 + 到鼠标的短连线
+      for (const p of pts) {
+        if (fine && mouse.x > -9000) {
+          const dx = p.x - mouse.x, dy = p.y - mouse.y, d2 = dx * dx + dy * dy;
+          if (d2 < LINK_D * 2.4 * (LINK_D * 2.4)) {
+            const dd = Math.sqrt(d2), al = Math.max(0, 1 - dd / (LINK_D * 2.4)) * 0.32;
+            if (al > 0.02) {
+              ctx.strokeStyle = `rgba(${p.c},${al})`;
+              ctx.lineWidth = 0.8;
+              ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(mouse.x, mouse.y); ctx.stroke();
+            }
+          }
+        }
+        const glow = 0.4 + 0.32 * Math.sin(t * 1.6 + p.tw);
+        ctx.fillStyle = `rgba(${p.c},${glow})`;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+      }
+      raf = requestAnimationFrame(tick);
+    }
+    raf = requestAnimationFrame(tick);
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) { running = false; cancelAnimationFrame(raf); }
+      else if (!running) { running = true; raf = requestAnimationFrame(tick); }
+    });
+  })();
+
+  /* ---------- 顶部公众号按钮：触摸/点击切换（桌面悬停由 CSS 处理） ---------- */
+  (function mpPop() {
+    const wrap = document.querySelector('.nav-mp');
+    const btn = wrap && wrap.querySelector('.nav-mp-btn');
+    if (!wrap || !btn) return;
+    btn.addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const open = wrap.classList.toggle('open');
+      btn.setAttribute('aria-expanded', String(open));
+    });
+    document.addEventListener('click', (e) => {
+      if (wrap.classList.contains('open') && !wrap.contains(e.target)) {
+        wrap.classList.remove('open'); btn.setAttribute('aria-expanded', 'false');
+      }
+    });
+  })();
+
+  /* ---------- 回到顶部：页脚链接 + 右下悬浮按钮，统一 JS 平滑滚动兜底 ---------- */
+  (function toTop() {
+    const floatBtn = document.getElementById('toTop');
+    const footLink = document.getElementById('footTop');
+    const goTop = (e) => { e.preventDefault(); scrollTo({ top: 0, behavior: 'smooth' }); };
+    if (footLink) footLink.addEventListener('click', goTop);
+    if (floatBtn) {
+      const footerEl = document.querySelector('footer');
+      floatBtn.addEventListener('click', goTop);
+      addEventListener('scroll', () => {
+        const fr = footerEl ? footerEl.getBoundingClientRect() : null;
+        const atFooter = fr ? fr.top < innerHeight - 6 : false;
+        floatBtn.classList.toggle('show', scrollY > 480 && !atFooter);
+      }, { passive: true });
+    }
+  })();
+</script>
+
+</body>
+</html>

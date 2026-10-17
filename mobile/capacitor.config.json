@@ -1,0 +1,12 @@
+{
+  "appId": "com.tang.rhythmviz",
+  "appName": "律动 RhythmViz",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}

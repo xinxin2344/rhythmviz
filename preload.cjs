@@ -1,0 +1,73 @@
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
+
+contextBridge.exposeInMainWorld('api', {
+  getPathForFile: (file) => {
+    try { return webUtils.getPathForFile(file); } catch { return null; }
+  },
+  getSettings: () => ipcRenderer.invoke('settings:get'),
+  setSetting: (key, val) => ipcRenderer.invoke('settings:set', key, val),
+
+  openAudioDialog: () => ipcRenderer.invoke('dialog:open-audio'),
+  openAudioFolder: () => ipcRenderer.invoke('dialog:open-folder'),
+  pickBackground: () => ipcRenderer.invoke('bg:pick'),
+  pickBackgroundVideo: () => ipcRenderer.invoke('bg:pick-video'),
+  pickImage: (title) => ipcRenderer.invoke('img:pick', title),
+  pickSourceJs: () => ipcRenderer.invoke('dialog:open-js'),
+  openMini: () => ipcRenderer.send('mini:open'),
+  sendMiniState: (st) => ipcRenderer.send('mini:sync', st),
+  onMiniSync: (cb) => ipcRenderer.on('mini:sync', (_e, s) => cb(s)),
+  miniControl: (cmd) => ipcRenderer.send('mini:cmd', cmd),
+  closeMini: () => ipcRenderer.send('mini:close'),
+  onMiniCmd: (cb) => ipcRenderer.on('mini:cmd', (_e, c) => cb(c)),
+  onMinimized: (cb) => ipcRenderer.on('win:minimized', (_e, m) => cb(m)),
+  readFile: (p) => ipcRenderer.invoke('file:read', p),
+  readText: (p) => ipcRenderer.invoke('file:text', p),
+  findLyric: (audioPath) => ipcRenderer.invoke('file:find-lyric', audioPath),
+  parseMeta: (p) => ipcRenderer.invoke('meta:parse', p),
+
+  /* 在线音源（全部为用户外部插件，统一经主进程调度） */
+  sourceList: () => ipcRenderer.invoke('source:list'),
+  sourceImport: (p) => ipcRenderer.invoke('source:import', p),
+  sourceRemove: (id) => ipcRenderer.invoke('source:remove', id),
+  sourceToggle: (id, on) => ipcRenderer.invoke('source:toggle', id, on),
+  sourceSearch: (srcId, kw, page) => ipcRenderer.invoke('source:search', srcId, kw, page),
+  sourceSearchAll: (kw) => ipcRenderer.invoke('source:search-all', kw),
+  sourceFeed: () => ipcRenderer.invoke('source:feed'),
+  sourcePlaylistDetail: (pid) => ipcRenderer.invoke('source:pldetail', pid),
+  sourceUserPlaylists: (srcId) => ipcRenderer.invoke('source:user-playlists', srcId),
+  sourceConfigGet: () => ipcRenderer.invoke('source:config:get'),
+  sourceConfigSet: (patch) => ipcRenderer.invoke('source:config:set', patch),
+  sourcePlayUrl: (spec) => ipcRenderer.invoke('source:playurl', spec),
+  sourceLyric: (srcId, id) => ipcRenderer.invoke('source:lyric', srcId, id),
+  sourceLyricMatch: (spec) => ipcRenderer.invoke('source:lyric-match', spec),
+  sourceBinary: (url, headers) => ipcRenderer.invoke('source:binary', url, headers),
+  audioCacheTake: (spec) => ipcRenderer.invoke('audio-cache:take', spec),
+  audioCachePrefetch: (tracks) => ipcRenderer.invoke('audio-cache:prefetch', tracks),
+  audioCacheClear: () => ipcRenderer.invoke('audio-cache:clear'),
+  sourceSearchArtist: (kw) => ipcRenderer.invoke('source:search-artist', kw),
+  sourceArtistAlbums: (srcId, id) => ipcRenderer.invoke('source:artist-albums', srcId, id),
+  sourceArtistTop: (srcId, id, name) => ipcRenderer.invoke('source:artist-top', srcId, id, name),
+  /* 扫码登录（主进程事件驱动，无需渲染层轮询） */
+  qrLoginStart: (platform) => ipcRenderer.invoke('start-qr-login', platform),
+  qrLoginCancel: (platform) => ipcRenderer.invoke('cancel-qr-login', platform),
+  onLoginSuccess: (cb) => ipcRenderer.on('login-success', (_e, info) => cb(info)),
+  onLoginQrUpdate: (cb) => ipcRenderer.on('login-qr-update', (_e, d) => cb(d)),
+  sourceLogout: (srcId) => ipcRenderer.invoke('source:logout', srcId),
+  sourceLoginInfo: (srcId) => ipcRenderer.invoke('source:login:info', srcId),
+  sourceLoginPlatforms: () => ipcRenderer.invoke('source:login:platforms'),
+  sourceProxyGet: () => ipcRenderer.invoke('source:proxy:get'),
+  sourceProxySet: (list, enabled) => ipcRenderer.invoke('source:proxy:set', list, enabled),
+  sourceUpdateCheck: (id) => ipcRenderer.invoke('source:update:check', id),
+  onSourceNotify: (cb) => ipcRenderer.on('source:notify', (_e, m) => cb(m)),
+
+  onAutotest: (cb) => ipcRenderer.on('autotest:start', () => cb()),
+  onShot: (cb) => ipcRenderer.on('shot:start', (_e, scene, kw) => cb(scene, kw)),
+  onMaximized: (cb) => ipcRenderer.on('win:maximized', (_e, m) => cb(m)),
+
+  minimizeWindow: () => ipcRenderer.send('win:minimize'),
+  toggleMaximize: () => ipcRenderer.send('win:maximize'),
+  setFullscreen: (on) => ipcRenderer.send('win:set-fullscreen', on),
+  closeWindow: () => ipcRenderer.send('win:close'),
+  onCloseAsk: (cb) => ipcRenderer.on('win:close-ask', () => cb()),
+  closeChoice: (p) => ipcRenderer.send('win:close-choice', p)
+});

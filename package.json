@@ -1,0 +1,67 @@
+{
+  "name": "rhythm-viz",
+  "productName": "律动 RhythmViz",
+  "version": "1.0.0",
+  "description": "沉浸式可视化音乐播放器 — 封面粒子 / 频谱反应堆 / 星河 / 唱片 / 全屏动态歌词",
+  "main": "main.js",
+  "type": "module",
+  "author": "tang",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "dependencies": {
+    "electron-store": "^10.0.0",
+    "music-metadata": "^10.5.0",
+    "three": "^0.186.1"
+  },
+  "build": {
+    "appId": "com.tang.rhythmviz",
+    "productName": "RhythmViz",
+    "files": [
+      "main.js",
+      "preload.cjs",
+      "src/**/*",
+      "sources/manager.js",
+      "sources/plugins/pixabay.template.js",
+      "sources/plugins/*.template.js",
+      "sources/sample-source.demo.js",
+      "build/icon.ico",
+      "build/icon.png",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "sources/plugins",
+        "to": "plug_src",
+        "filter": [
+          "netease.js",
+          "qq.js"
+        ]
+      },
+      {
+        "from": "sources/qrologin.js",
+        "to": "login_src/qrologin.mjs"
+      }
+    ],
+    "directories": {
+      "output": "dist13"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "keywords": []
+}

@@ -1,0 +1,689 @@
+/* ============================================================
+   RhythmViz · Android 移动端适配
+   html.rv-mobile rv-android：App 内全部方向（触摸/安全区/隐藏桌面入口）
+   html.rv-portrait：竖屏移动布局（旋转由 bridge.js 切类，CSS 零 JS 动画切换）
+   html.rv-landscape：沿用桌面布局（窄窗口媒体查询自然生效），仅安全区修正
+   ============================================================ */
+
+/* ============ 一、App 内通用（横竖屏） ============ */
+html.rv-android {
+  -webkit-tap-highlight-color: transparent;
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+}
+html.rv-android, html.rv-android body {
+  /* WebView 里 100vh 会被地址栏/导航条影响，用动态视口高度兜底 */
+  height: 100%;
+  overscroll-behavior: none;
+}
+/* 触摸滚动动量（所有内滚容器） */
+html.rv-android #home,
+html.rv-android .rail-row,
+html.rv-android .fx-body,
+html.rv-android .track-list,
+html.rv-android .hs-drop,
+html.rv-android #myPlGrid {
+  -webkit-overflow-scrolling: touch;
+}
+/* 标题栏在 App 内不是窗口拖拽区，避免吞触摸 */
+html.rv-android #titlebar,
+html.rv-android .tb-drag,
+html.rv-android .tb-actions { -webkit-app-region: no-drag; }
+
+/* 按钮触摸去粘滞：点按即触发 :active，抬起不滞留 hover 位移 */
+@media (hover: none) {
+  html.rv-android .tb-btn:hover,
+  html.rv-android .ctrl-btn:hover,
+  html.rv-android .play-btn:hover,
+  html.rv-android .hs-item:hover,
+  html.rv-android .rail-item:hover,
+  html.rv-android .pl-card:hover,
+  html.rv-android .np-act:hover,
+  html.rv-android .login-plat:hover {
+    transform: none;
+    filter: none;
+  }
+}
+/* 搜索结果尾部的播放/箭头按钮在手机端不显示：整行点击即播放（v1.1.3） */
+html.rv-android .hs-play { display: none !important; }
+html.rv-android .cover-up { opacity: 0.85; transform: scale(1); }
+
+/* ---- 隐藏桌面端专属 / 移动端垫片不支持的入口 ---- */
+/* 窗口控制 + 桌面全屏按钮 */
+html.rv-android #btnMin,
+html.rv-android #btnMax,
+html.rv-android #btnClose,
+html.rv-android .tb-sep,
+html.rv-android #btnFull { display: none !important; }
+/* 外观：本地图片/视频背景（无文件选择能力；渐变预设与封面氛围保留） */
+html.rv-android #btnBgPick,
+html.rv-android #btnBgVideo { display: none !important; }
+/* 高级页：本地文件导入、迷你窗、关闭行为（托盘）、音频缓存（垫片无实现） */
+html.rv-android #btnFxImport,
+html.rv-android #btnFxImportDir,
+html.rv-android #btnMini,
+html.rv-android #closeActSeg,
+html.rv-android #btnClearCache,
+html.rv-android #closeActSeg ~ .fx-note { display: none !important; }
+/* 设置中心「音源」tab + 播放列表抽屉「音源」tab（移动端音源内置固定） */
+html.rv-android .fx-tab[data-ft="src"],
+html.rv-android #tabSrcBtn { display: none !important; }
+/* 播放列表抽屉：本地导入按钮（清空保留） */
+html.rv-android #btnImport,
+html.rv-android #btnImportDir { display: none !important; }
+/* 拖放提示 */
+html.rv-android #dropHint { display: none !important; }
+
+/* 顶部标题栏：去掉右侧窗口按钮后收紧，预留状态栏安全区 */
+html.rv-android #titlebar {
+  height: calc(46px + var(--sat));
+  padding-top: var(--sat);
+  padding-left: calc(14px + var(--sal));
+  padding-right: calc(8px + var(--sar));
+}
+html.rv-android .tb-btn { min-width: 38px; height: 32px; }
+
+/* 居中浮窗：小屏留边（桌面值 330/360/272 在窄屏会贴边） */
+html.rv-android #fxPanel,
+html.rv-android #lyricPop,
+html.rv-android #loginPop { max-width: calc(100vw - 20px - var(--sal) - var(--sar)); }
+
+/* 横屏：底部 dock 与侧边防误触安全区（其余沿用桌面布局） */
+html.rv-landscape #bottombar { bottom: calc(14px + var(--sab)); }
+html.rv-landscape #home {
+  padding-top: calc(60px + var(--sat));
+  padding-bottom: calc(96px + var(--sab));
+}
+
+/* ============ 二、竖屏移动布局 ============ */
+html.rv-portrait #titlebar .tb-brand { font-size: 11px; letter-spacing: 0.1em; }
+html.rv-portrait .tb-actions { gap: 3px; }
+html.rv-portrait .tb-btn { min-width: 36px; padding: 0 7px; border-radius: 11px; }
+
+/* ---- 首页：纵向流，卡片全宽，底部给常驻 dock 让位 ---- */
+html.rv-portrait #home {
+  gap: 14px;
+  padding: calc(58px + var(--sat)) 12px calc(168px + var(--sab));
+  align-items: stretch;
+}
+html.rv-portrait .home-hero { margin-top: 2px; }
+html.rv-portrait .home-kicker { font-size: 9px; letter-spacing: 0.34em; margin-bottom: 8px; }
+html.rv-portrait .home-greet { font-size: 30px; }
+html.rv-portrait #homeTime { font-size: 28px; }
+html.rv-portrait #homeDate { font-size: 12px; }
+
+html.rv-portrait .home-search,
+html.rv-portrait .home-rail,
+html.rv-portrait .home-pl { width: 100%; }
+html.rv-portrait .home-search { padding: 5px 6px 5px 14px; }
+html.rv-portrait #homeSearchInput { height: 42px; font-size: 14px; }
+html.rv-portrait .home-search .pill-btn { padding: 0 15px; height: 38px; display: flex; align-items: center; }
+html.rv-portrait .hs-drop {
+  top: calc(100% + 8px);
+  max-height: 52vh;
+  border-radius: 18px;
+  padding: 12px 14px;
+}
+
+/* 搜索结果：单列大触摸行 */
+html.rv-portrait .hs-grid { grid-template-columns: 1fr; gap: 4px; }
+html.rv-portrait .hs-item { padding: 10px 8px; border-radius: 14px; }
+html.rv-portrait .hs-item img { width: 48px; height: 48px; }
+html.rv-portrait .hs-name { font-size: 13.5px; }
+html.rv-portrait .hs-artist { font-size: 11px; }
+
+/* 横向轨道卡片略缩，一屏多露半张引导横滑 */
+html.rv-portrait .home-rail,
+html.rv-portrait .home-pl { padding: 12px 12px 10px; border-radius: 18px; }
+html.rv-portrait .rail-item { width: 116px; padding: 7px; }
+html.rv-portrait .pl-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+html.rv-portrait #myPlGrid.pl-grid {
+  grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
+  gap: 7px;
+  max-height: 300px;
+}
+html.rv-portrait .rail-head { margin-bottom: 8px; gap: 8px; flex-wrap: wrap; }
+html.rv-portrait #myPlNote,
+html.rv-portrait #plNote { display: none; } /* 窄屏隐藏次要说明文字，省一行 */
+
+/* ---- 底部播放 dock：贴底圆角条，两行布局（信息 / 控制） ---- */
+html.rv-portrait #bottombar {
+  bottom: 0;
+  left: 0; right: 0;
+  margin: 0;
+  width: 100%;
+  border-radius: 22px 22px 0 0;
+  padding-bottom: var(--sab);
+}
+html.rv-portrait #progressBar {
+  height: 16px;
+  margin: 0 12px;
+  background: transparent;
+  display: flex;
+  align-items: center;
+}
+html.rv-portrait #seekPlayed { height: 4px; }
+html.rv-portrait #seekKnob {
+  width: 13px; height: 13px;
+  transform: translate(-50%, -50%) scale(1);
+}
+html.rv-portrait .bb-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "left  right"
+    "center center";
+  gap: 7px 10px;
+  padding: 7px 12px 10px;
+}
+html.rv-portrait .bb-left { grid-area: left; gap: 10px; }
+html.rv-portrait .cover-btn { width: 44px; height: 44px; }
+html.rv-portrait .bb-right { grid-area: right; gap: 4px; }
+html.rv-portrait .bb-center { grid-area: center; justify-content: center; gap: 14px; }
+html.rv-portrait .play-btn { width: 52px; height: 52px; margin: 0; }
+html.rv-portrait .ctrl-btn { width: 40px; height: 40px; }
+/* 竖屏去掉音量条（手机走物理音量键）与分隔斜杠，保留时间/首页/列表 */
+html.rv-portrait #volume,
+html.rv-portrait #btnVolume,
+html.rv-portrait .time-sep { display: none; }
+html.rv-portrait .time { font-size: 10.5px; min-width: 30px; }
+
+/* ---- 播放页（大封面 + 歌词）：封面在上、歌词在下 ---- */
+html.rv-portrait #np { align-items: stretch; justify-content: stretch; }
+html.rv-portrait .np-inner {
+  grid-template-columns: 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 14px;
+  width: 100%;
+  height: 100%;
+  padding: calc(56px + var(--sat)) 12px calc(18px + var(--sab));
+}
+/* 覆盖桌面窄窗口媒体查询里的「小封面横排」形态，改为竖排居中大封面 */
+html.rv-portrait .np-left { flex-direction: column; gap: 12px; }
+html.rv-portrait .np-cover-wrap { width: min(50vw, 208px); }
+html.rv-portrait #npCover { border-radius: 22px; }
+html.rv-portrait #npTitle { font-size: 17px; }
+html.rv-portrait #npArtist { font-size: 12px; }
+html.rv-portrait .np-acts { margin-top: 10px; }
+html.rv-portrait .np-act { width: 42px; height: 42px; }
+html.rv-portrait .np-back {
+  top: calc(10px + var(--sat));
+  left: calc(10px + var(--sal));
+}
+/* 竖屏纯歌词模式：歌词区铺满（np-left 已被桌面 lyric-mode 规则隐藏） */
+html.rv-portrait body.lyric-mode .np-inner {
+  grid-template-rows: minmax(0, 1fr);
+  padding-top: calc(40px + var(--sat));
+}
+
+/* ---- 浮层 / 抽屉：近全宽 ---- */
+html.rv-portrait #fxPanel {
+  width: calc(100vw - 16px - var(--sal) - var(--sar));
+  max-height: calc(100dvh - 90px - var(--sat) - var(--sab));
+  border-radius: 24px;
+}
+html.rv-portrait #lyricPop,
+html.rv-portrait #loginPop {
+  width: auto;
+  left: 10px !important;
+  right: 10px;
+  max-width: none;
+}
+html.rv-portrait #drawer {
+  top: calc(8px + var(--sat));
+  left: calc(8px + var(--sal));
+  right: calc(8px + var(--sar));
+  bottom: calc(8px + var(--sab));
+  width: auto;
+  max-width: none;
+  border-radius: 22px;
+}
+/* 「加入歌单」浮层：dock 上方全宽 */
+html.rv-portrait #songMenu {
+  left: 10px;
+  right: 10px;
+  bottom: calc(158px + var(--sab));
+  width: auto;
+}
+
+/* ---- 歌单拼图页：头部换行，底部胶囊留安全区 ---- */
+html.rv-portrait .pf-head { flex-wrap: wrap; gap: 8px; padding: calc(40px + var(--sat)) 4px 10px; }
+html.rv-portrait .pf-name { font-size: 18px; }
+html.rv-portrait .pf-acts { width: 100%; justify-content: space-between; }
+html.rv-portrait #pfHero { bottom: calc(10px + var(--sab)); }
+
+/* 启动页大标题：9 个字母按屏宽精算（≈5.94em 总宽），保证小屏不截断 */
+html.rv-portrait .sp-word {
+  font-size: clamp(28px, 10.2vw, 68px);
+  gap: 0.03em;
+  max-width: 96vw;
+  transform: scale(0.96);
+}
+html.rv-portrait .sp-sub { font-size: 8px; letter-spacing: 0.22em; }
+html.rv-portrait .sp-deco { transform: scale(0.82); margin: -4px 0; }
+html.rv-portrait .sp-title-wrap { gap: 10px; }
+
+/* ============================================================
+   三、网易云式手机播放器（bridge.js 交互壳配套样式，横/竖屏通用）
+   ============================================================ */
+
+/* ---- 隐藏桌面端概念入口：歌词设置 / 视觉控制台 / 歌单拼图 / 海报墙全屏 ---- */
+html.rv-android #btnLyric,
+html.rv-android #btnFx,
+html.rv-android #plViewSeg,
+html.rv-android #btnPlFull,
+html.rv-android #plFolia,
+html.rv-android #btnDemo,
+html.rv-android #btnFxFull,
+html.rv-android #btnFxLyric,
+html.rv-android #btnFullLyric,
+html.rv-android #btnFocus { display: none !important; }
+
+/* ---- 底部三 Tab ---- */
+html.rv-android #rvTabbar {
+  position: fixed; z-index: 200;
+  left: 0; right: 0; bottom: 0;
+  height: calc(60px + var(--sab));
+  padding-bottom: var(--sab);
+  display: flex;
+  background: rgba(12, 12, 16, 0.94);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+html.rv-android .rv-tab {
+  flex: 1; border: 0; background: none;
+  color: #8f8f99;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; font-size: 10px; line-height: 1;
+}
+html.rv-android .rv-tab-ic { font-size: 20px; }
+html.rv-android .rv-tab.on { color: var(--accent, #a78bfa); }
+
+/* 播放 dock 抬到 Tab 栏之上 */
+html.rv-android #bottombar { bottom: calc(60px + var(--sab)); }
+
+/* ---- Tab 内容分区（只显示当前 Tab 的内容，杜绝主页横向滑动） ---- */
+html.rv-android body:not(.rv-tab-home) .home-hero,
+html.rv-android body:not(.rv-tab-home) #hotRail,
+html.rv-android body:not(.rv-tab-home) #homeRecent,
+html.rv-android body:not(.rv-tab-home) #recSongsRail,
+html.rv-android body:not(.rv-tab-home) .home-pl { display: none !important; }
+html.rv-android body:not(.rv-tab-search) #homeSearchBox,
+html.rv-android body:not(.rv-tab-search) #homeSearchSec { display: none !important; }
+html.rv-android body:not(.rv-tab-mine) #myPlSec { display: none !important; }
+
+/* 首页 / 我的底部让位：dock + tabbar */
+html.rv-android #home { padding-bottom: calc(172px + var(--sab)); }
+
+/* ---- 信息流：全部改为竖向歌曲行（禁止 rail 横向滚动） ---- */
+html.rv-android .rail-row {
+  display: flex !important;
+  flex-direction: column;
+  gap: 2px;
+  overflow-x: hidden !important;
+  padding-bottom: 2px;
+}
+html.rv-android .rail-item {
+  width: 100% !important;
+  display: grid;
+  grid-template-columns: 22px 46px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 12px;
+  text-align: left;
+}
+html.rv-android .rail-item .ri-idx { grid-column: 1; grid-row: 1 / 3; }
+html.rv-android .rail-item img {
+  grid-column: 2; grid-row: 1 / 3;
+  width: 46px; height: 46px; border-radius: 10px;
+}
+html.rv-android .rail-item .ri-name {
+  grid-column: 3; grid-row: 1; width: auto;
+  font-size: 13.5px; line-height: 1.35;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+html.rv-android .rail-item .ri-artist {
+  grid-column: 3; grid-row: 2; width: auto;
+  font-size: 11px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* 推荐歌单：保持两行竖向网格，不再有海报墙/横向引导 */
+html.rv-android .home-pl .pl-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+/* ---- 我的页：账号卡 ---- */
+html.rv-android #rvAccount {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%;
+  margin-bottom: 12px;
+  padding: 13px 15px;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  text-align: left;
+}
+html.rv-android .rva-ic { font-size: 22px; }
+html.rv-android .rva-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+html.rv-android .rva-meta b { font-size: 14.5px; }
+html.rv-android .rva-meta i { font-size: 11px; color: #8f8f99; font-style: normal; }
+html.rv-android .rva-go { font-size: 20px; color: #8f8f99; }
+
+/* ---- 移动歌单详情页（普通竖向列表，替代歌单拼图） ---- */
+html.rv-android #rvPlView {
+  position: fixed; inset: 0; z-index: 260;
+  display: flex; flex-direction: column;
+  padding-top: var(--sat);
+  background: linear-gradient(180deg, #0d0d13 0%, #060608 60%);
+  transform: translateY(100%);
+  transition: transform 0.26s ease;
+}
+html.rv-android #rvPlView.on { transform: none; }
+html.rv-android .rvp-head {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 10px 10px;
+}
+html.rv-android .rvp-back {
+  flex: none; width: 38px; height: 38px;
+  border: 0; background: none; color: #fff;
+  font-size: 30px; line-height: 1;
+}
+html.rv-android .rvp-cover {
+  width: 52px; height: 52px; border-radius: 12px;
+  object-fit: cover; background: #1c1c24; flex: none;
+}
+html.rv-android .rvp-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+html.rv-android .rvp-name {
+  font-size: 16px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+html.rv-android .rvp-count { font-size: 11px; color: #8f8f99; font-style: normal; }
+html.rv-android .rvp-fav {
+  flex: none; width: 38px; height: 38px; border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.15); background: transparent;
+  color: #fff; font-size: 16px;
+}
+html.rv-android .rvp-playall {
+  margin: 4px 14px 12px;
+  height: 44px; border: 0; border-radius: 22px;
+  background: var(--grad); color: #111; font-weight: 700; font-size: 14px;
+}
+html.rv-android .rvp-list { flex: 1; overflow-y: auto; padding: 0 10px calc(24px + var(--sab)); }
+html.rv-android .rvp-row {
+  display: grid; grid-template-columns: 34px minmax(0, 1fr);
+  width: 100%; padding: 11px 8px;
+  border: 0; background: none; color: inherit; text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+html.rv-android .rvp-idx { font-size: 12px; color: #8f8f99; text-align: center; }
+html.rv-android .rvp-txt { min-width: 0; display: flex; flex-direction: column; gap: 3px; text-align: left; }
+html.rv-android .rvp-txt b {
+  font-size: 14px; font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+html.rv-android .rvp-txt i {
+  font-size: 11px; color: #8f8f99; font-style: normal;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+html.rv-android .rvp-empty { padding: 30px 0; text-align: center; color: #8f8f99; font-size: 13px; }
+
+/* ---- 登录弹层：QQ 一键登录按钮 ---- */
+html.rv-android .rv-qq-quick {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; padding: 13px 15px; margin-bottom: 14px;
+  border: 0; border-radius: 16px;
+  color: #fff;
+  background: linear-gradient(135deg, #2a96ff, #0b5fd0);
+  box-shadow: 0 8px 22px rgba(29, 126, 255, 0.28);
+  text-align: left;
+}
+html.rv-android .rv-qq-ic { font-size: 22px; }
+html.rv-android .rv-qq-tx { display: flex; flex-direction: column; gap: 2px; }
+html.rv-android .rv-qq-tx b { font-size: 15px; }
+html.rv-android .rv-qq-tx i { font-size: 11px; font-style: normal; opacity: 0.92; }
+
+/* ---- 轻提示 ---- */
+html.rv-android #rvToast {
+  position: fixed; z-index: 999;
+  left: 50%; bottom: calc(250px + var(--sab));
+  transform: translateX(-50%) translateY(16px);
+  opacity: 0; pointer-events: none;
+  padding: 10px 18px;
+  background: rgba(20, 20, 26, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 22px;
+  font-size: 13px; white-space: nowrap;
+  transition: opacity 0.22s, transform 0.22s;
+}
+html.rv-android #rvToast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* 搜索 Tab：输入框常驻，下拉浮层位置贴住输入框 */
+html.rv-android body.rv-tab-search #home { padding-top: calc(70px + var(--sat)); }
+
+/* 浮层/抽屉要压过 Tab 栏与 dock */
+html.rv-android #fxPanel,
+html.rv-android #drawer,
+html.rv-android #lyricPop,
+html.rv-android #loginPop { z-index: 320; }
+
+/* ============================================================
+   四、v1.1.1 真机修复（对齐网易云）
+   ============================================================ */
+
+/* ---- 1. 杜绝任何横向拖动 / 橡皮筋 ---- */
+html.rv-android, html.rv-android body {
+  overflow-x: hidden !important;
+  overscroll-behavior: none !important;
+  touch-action: pan-y !important;
+}
+html.rv-android #home,
+html.rv-android .home-hero,
+html.rv-android .rail-head { overflow-x: hidden !important; max-width: 100vw; }
+html.rv-android #progressBar { touch-action: none !important; }
+
+/* ---- 2. 迷你播放条：网易云式单行（封面+歌名 / 播放键 / 列表键） ---- */
+html.rv-android #bottombar { border-radius: 0 !important; padding: 0 !important; }
+html.rv-android #progressBar {
+  position: absolute !important; top: 0 !important; left: 0 !important; right: 0 !important;
+  height: 3px !important; margin: 0 !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+html.rv-android #seekKnob { display: none !important; }
+html.rv-android .bb-inner {
+  display: flex !important; align-items: center; gap: 10px;
+  padding: 10px 12px 11px !important;
+}
+html.rv-android .bb-left {
+  flex: 1 1 auto; min-width: 0;
+  display: flex !important; align-items: center; gap: 10px;
+}
+html.rv-android #btnNp { width: 44px !important; height: 44px !important; border-radius: 10px !important; flex: none; }
+html.rv-android .cover-up { display: none !important; }
+html.rv-android .bb-meta { min-width: 0; flex: 1; }
+html.rv-android #tTitle { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html.rv-android #tArtist { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html.rv-android .bb-center { flex: none; display: flex !important; align-items: center; margin: 0 !important; }
+html.rv-android #btnShuffle,
+html.rv-android #btnPrev,
+html.rv-android #btnNext { display: none !important; }
+html.rv-android #btnPlay {
+  width: 40px !important; height: 40px !important; border-radius: 50% !important;
+  display: inline-flex !important; align-items: center; justify-content: center;
+  padding: 0 !important; margin: 0 !important; font-size: 15px; line-height: 1; text-indent: 2px;
+}
+html.rv-android .bb-right { flex: none; display: flex !important; align-items: center; margin: 0 !important; }
+html.rv-android #btnHome,
+html.rv-android #curTime,
+html.rv-android #durTime,
+html.rv-android .time-sep,
+html.rv-android #btnVolume,
+html.rv-android #volume { display: none !important; }
+html.rv-android #btnList {
+  width: 38px !important; height: 38px !important; font-size: 17px;
+  display: inline-flex !important; align-items: center; justify-content: center; padding: 0 !important;
+}
+
+/* ---- 3. 播放页：网易云黑胶唱片 ---- */
+html.rv-android #np .np-inner {
+  flex-direction: column !important; align-items: center;
+  padding: calc(46px + var(--sat)) 22px calc(140px + var(--sab)) !important;
+  overflow-y: auto; gap: 14px;
+}
+html.rv-android #np .np-left { align-items: center !important; text-align: center; gap: 12px; width: 100%; }
+html.rv-android .np-cover-wrap {
+  width: min(46vw, 200px) !important; height: auto !important; aspect-ratio: 1 / 1;
+  border-radius: 50% !important;
+  box-shadow: 0 0 0 7px rgba(10, 10, 14, 0.92), 0 0 0 9px rgba(255, 255, 255, 0.07), 0 20px 54px rgba(0, 0, 0, 0.65) !important;
+}
+html.rv-android #npCover {
+  border-radius: 50% !important;
+  animation: rvVinylSpin 26s linear infinite;
+}
+html.rv-android .np-cover-glow { display: none !important; }
+html.rv-android .np-meta { align-items: center !important; text-align: center; }
+html.rv-android #npTitle { font-size: 19px; }
+html.rv-android #npArtist { font-size: 12.5px; opacity: 0.75; }
+html.rv-android .np-acts { justify-content: center !important; }
+html.rv-android #np .np-right { width: 100%; flex: none !important; height: 30vh; min-height: 180px; }
+html.rv-android .np-back { top: calc(8px + var(--sat)) !important; left: calc(10px + var(--sal)) !important; z-index: 30; }
+@keyframes rvVinylSpin { to { transform: rotate(360deg); } }
+
+/* ============================================================
+   五、v1.1.2 真机反馈（二）
+   ============================================================ */
+
+/* ---- 设置齿轮入口不要（手机端不留设置中心） ---- */
+html.rv-android #btnSys { display: none !important; }
+
+/* ---- 热歌榜 / 最近 / 推荐：一行两首（紧凑双卡） ---- */
+html.rv-android .rail-row {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 8px !important;
+}
+html.rv-android .rail-item {
+  grid-template-columns: 42px minmax(0, 1fr) !important;
+  grid-template-rows: auto auto !important;
+  column-gap: 8px !important;
+  padding: 7px 8px !important;
+  border-radius: 10px !important;
+}
+html.rv-android .rail-item .ri-idx { display: none !important; }
+html.rv-android .rail-item img {
+  grid-column: 1 !important; grid-row: 1 / 3 !important;
+  width: 42px !important; height: 42px !important; border-radius: 8px !important;
+}
+html.rv-android .rail-item .ri-name { grid-column: 2 !important; font-size: 12.5px !important; }
+html.rv-android .rail-item .ri-artist { grid-column: 2 !important; font-size: 10.5px !important; }
+
+/* ---- 迷你控制条：没在放歌时整条隐藏 ---- */
+html.rv-android body:not(.rv-has-track) #bottombar { display: none !important; }
+
+/* ---- 播放页：底部 Tab 栏隐藏，控制条变成播放页专用整行（封面/歌名让位给唱片区） ---- */
+html.rv-android body.np-open #rvTabbar { display: none !important; }
+html.rv-android body.np-open #bottombar {
+  bottom: 0 !important; border-radius: 0 !important;
+  transition: transform 0.25s ease;
+}
+html.rv-android body.np-open #np .np-inner {
+  padding-bottom: calc(104px + var(--sab)) !important;
+  transition: padding-bottom 0.25s ease;
+}
+html.rv-android body.np-open .bb-inner {
+  display: flex !important; align-items: center; justify-content: center;
+  padding: 8px calc(20px + var(--sal)) calc(12px + var(--sab)) !important;
+}
+html.rv-android body.np-open .bb-left { display: none !important; }
+html.rv-android body.np-open .bb-center {
+  flex: 0 1 auto !important; margin: 0 auto !important;
+  display: flex !important; align-items: center; justify-content: center;
+  gap: clamp(8px, 5vw, 26px);
+}
+html.rv-android body.np-open .bb-right { display: none !important; }
+/* 沉浸模式：点唱片隐藏控制条，歌词区下探到底 */
+html.rv-android body.np-open.rv-np-chrome-off #bottombar { transform: translateY(100%); }
+html.rv-android body.np-open.rv-np-chrome-off #np .np-inner {
+  padding-bottom: calc(18px + var(--sab)) !important;
+}
+html.rv-android body.np-open #btnShuffle,
+html.rv-android body.np-open #btnPrev,
+html.rv-android body.np-open #btnNext {
+  display: inline-flex !important; align-items: center; justify-content: center;
+  width: 48px !important; height: 48px !important; font-size: 20px !important;
+  background: none !important; border: 0 !important; color: rgba(255,255,255,0.92) !important;
+}
+html.rv-android body.np-open #btnPlay {
+  width: 58px !important; height: 58px !important; font-size: 21px !important;
+}
+
+/* ---- 歌词不跳动：关掉鼓点缩放/弹跳/心跳动画，只保留平滑上滚与逐字变色 ---- */
+html.rv-android #lyrics .lyric-line,
+html.rv-android #lyrics .lyric-line .tline,
+html.rv-android #lyrics .lyric-line .char {
+  transition: color 0.25s ease, opacity 0.25s ease, filter 0.25s ease, text-shadow 0.25s ease !important;
+  animation: none !important;
+}
+html.rv-android #lyrics .lyric-line.active,
+html.rv-android #lyrics .style-flow .lyric-line.active { transform: none !important; }
+html.rv-android #lyrics .lyric-line .char.sing { transform: none !important; }
+
+/* ============================================================
+   六、v1.1.3 真机反馈（三）
+   ============================================================ */
+
+/* ---- 热歌榜 / 最近在线：只露 4 行（双列共 8 首），区域内上下滑动 ---- */
+html.rv-android #hotRailRow,
+html.rv-android #homeRecentRow {
+  max-height: 242px; /* 4 行：行高约 56px × 4 + 行间距 6px × 3 */
+  overflow-y: auto;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  padding-right: 2px;
+}
+html.rv-android #hotRailRow .rail-empty,
+html.rv-android #homeRecentRow .rail-empty { grid-column: 1 / -1; }
+
+/* ---- 歌单详情：两列封面卡网格 ---- */
+html.rv-android #rvPlView .rvp-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-content: start;
+  padding: 2px 10px calc(24px + var(--sab));
+}
+html.rv-android #rvPlView .rvp-row {
+  display: flex; flex-direction: column;
+  width: 100%; min-width: 0;
+  padding: 0; overflow: hidden;
+  background: rgba(255, 255, 255, 0.05);
+  border: 0; border-radius: 12px;
+}
+html.rv-android #rvPlView .rvp-row:active { background: rgba(255, 255, 255, 0.1); }
+html.rv-android #rvPlView .rvp-cov {
+  display: block; width: 100%; aspect-ratio: 1 / 1;
+  object-fit: cover; border-radius: 0;
+  background: #1c1c24;
+}
+html.rv-android #rvPlView .rvp-cov-empty {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 38px; color: #3a3a46;
+}
+html.rv-android #rvPlView .rvp-txt {
+  padding: 7px 9px 9px; gap: 2px;
+}
+html.rv-android #rvPlView .rvp-txt b { font-size: 12.5px; }
+html.rv-android #rvPlView .rvp-txt i { font-size: 10.5px; }
+html.rv-android #rvPlView .rvp-empty { grid-column: 1 / -1; }

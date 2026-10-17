@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">律动 RhythmViz</string>
+    <string name="title_activity_main">律动 RhythmViz</string>
+    <string name="package_name">com.tang.rhythmviz</string>
+    <string name="custom_url_scheme">com.tang.rhythmviz</string>
+</resources>
