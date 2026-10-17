@@ -500,6 +500,20 @@
   .sw-wx { background: #07c160; }
   .sw-ali { background: #1677ff; }
 
+  /* ---------- 关注公众号（独立板块） ---------- */
+  .follow-wrap { display: flex; justify-content: center; margin-top: 46px; }
+  .follow-card {
+    width: 268px; padding: 18px 18px 16px; border-radius: var(--radius);
+    background: #fff; text-align: center;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+    transition: transform 0.35s cubic-bezier(0.2, 0.7, 0.3, 1), box-shadow 0.35s;
+  }
+  .follow-card:hover { transform: translateY(-6px); box-shadow: 0 26px 60px rgba(0, 0, 0, 0.45), 0 0 50px rgba(7, 193, 96, 0.18); }
+  .follow-card img { width: 100%; border-radius: 12px; display: block; }
+  .follow-plat { margin-top: 14px; font-size: 14px; font-weight: 700; color: #141418; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .follow-tip { margin-top: 6px; font-size: 12px; color: #6b6b76; }
+
   /* ---------- 下载备用通道（卡片外独立区块） ---------- */
   .dl-alt { text-align: center; }
   .dl-alt-t { display: block; text-align: center; font-size: 11.5px; letter-spacing: 0.04em; color: var(--muted); opacity: 0.75; margin-bottom: 9px; }
@@ -834,7 +848,7 @@
       </div>
 
       <div class="dl-card android">
-        <span class="rec wip">开发中</span>
+        <span class="rec new">● NEW</span>
 
         <div class="dl-head">
           <div class="dl-os-ico" aria-hidden="true">
@@ -847,20 +861,20 @@
         </div>
 
         <div class="dl-meta">
-          <span class="chip">v1.1.0 打磨中</span>
+          <span class="chip">v1.1.2 正式版</span>
+          <span class="chip">约 7 MB</span>
           <span class="chip">APK 直装包</span>
-          <span class="chip">即将开放</span>
         </div>
 
-        <span class="btn primary dl-main wip" aria-disabled="true">
-          <span>正在开发中 · 敬请期待</span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/></svg>
-        </span>
+        <a href="https://github.com/xinxin2344/rhythmviz/releases/download/v1.1.2/RhythmViz-1.1.2.apk" download class="btn primary dl-main">
+          <span>下载 RhythmViz v1.1.2</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/></svg>
+        </a>
         <div class="dl-note">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5"/></svg>
-          已完成：网易云式竖屏布局 · 返回键逐级返回 · QQ 一键登录
+          香港直链 · 点击即下 · 音源已内置、打开即用
         </div>
-        <div class="dl-mirror">安卓版正在真机调试与细节打磨，完成测试后第一时间在此开放 APK 下载——关注下方公众号，上线第一时间通知。</div>
+        <div class="dl-mirror">网易云式竖屏布局 · 返回键逐级返回 · QQ 一键登录；安装时如提示风险，选择「仍要安装 / 继续安装」即可。</div>
       </div>
 
       <div class="dl-alt">
@@ -914,8 +928,22 @@
       </ol>
       <p style="margin: 26px auto 0; max-width: 680px; text-align: center; font-size: 12.5px; line-height: 1.8; color: var(--muted);">
         <span style="color: #58db92; font-weight: 700; letter-spacing: 0.08em;">ANDROID 用户：</span>
-        安卓版正在开发打磨中，暂未开放下载；上线后手机浏览器直接下载 APK 安装即可（音源已内置、打开即用），可先关注公众号获取上线通知。
+        安卓 v1.1.2 已上线，手机浏览器直接点击上方 APK 按钮下载安装即可（音源已内置、打开即用）；版本更新会在公众号第一时间通知。
       </p>
+    </div>
+  </section>
+
+  <!-- ================= 关注公众号 ================= -->
+  <section id="follow" style="text-align: center;">
+    <span class="kicker reveal">FOLLOW · 关注更新</span>
+    <h2 class="sec-title reveal">关注公众号，新版本不错过。</h2>
+    <p class="sec-sub reveal" style="margin: 0 auto;">安卓版与电脑版的每次更新、新视觉场景和使用技巧，都会在公众号第一时间推送——微信扫一扫即可关注。</p>
+    <div class="follow-wrap reveal">
+      <div class="follow-card">
+        <img src="shots/wechat-mp.jpg" alt="律动 RhythmViz 微信公众号二维码" loading="lazy" decoding="async">
+        <div class="follow-plat"><span class="sw sw-wx"></span>微信公众号 · 律动 RhythmViz</div>
+        <div class="follow-tip">微信扫码关注 · 获取版本更新通知</div>
+      </div>
     </div>
   </section>
 
@@ -932,10 +960,6 @@
       <div class="donate-card">
         <img src="shots/donate-alipay.jpg" alt="支付宝打赏收款码" loading="lazy" decoding="async">
         <div class="plat"><span class="sw sw-ali"></span>支付宝打赏</div>
-      </div>
-      <div class="donate-card">
-        <img src="shots/wechat-mp.jpg" alt="微信公众号二维码" loading="lazy" decoding="async">
-        <div class="plat"><span class="sw sw-wx"></span>关注公众号 · 获取更新</div>
       </div>
     </div>
   </section>
@@ -975,6 +999,7 @@
   <div class="f-links">
     <a href="#features">功能</a>
     <a href="#download">下载</a>
+    <a href="#follow">公众号</a>
     <a href="#donate">打赏</a>
     <a href="#legal">版权声明</a>
     <a href="#top">回到顶部 ↑</a>
