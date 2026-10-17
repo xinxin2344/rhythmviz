@@ -196,6 +196,7 @@ import { App } from '@capacitor/app';
 import { registerPlugin } from '@capacitor/core';
 
 const QqLogin = registerPlugin('QqLogin');
+const MediaNotif = registerPlugin('MediaNotif');
 const isNative = !!window.Capacitor?.isNativePlatform?.();
 
 /* ---------- 小工具 ---------- */
@@ -528,6 +529,7 @@ whenDom(() => {
   buildAccountCard();
   buildPlView();
   injectQqQuickLogin();
+  bindMediaNotification();
   if (isNative) {
     App.addListener('backButton', () => {
       try { back(); } catch (e) { console.error('[rv] back error', e); }
@@ -542,6 +544,105 @@ whenDom(() => {
 
 /* 登录成功后刷新「我的」账号卡 */
 _qrSuccessCbs.add(() => setTimeout(refreshAccountCard, 200));
+
+/* ============================================================
+   三之二、通知栏 / 锁屏媒体控制器联动
+   engine 'track' → start+update(含封面)；'state' → update 播放态
+   原生 'action' 事件 → engine.playPause/next/prev
+   ============================================================ */
+function bindMediaNotification() {
+  if (!isNative) return;
+  const tryBind = () => {
+    const eng = window.__app?.engine;
+    if (!eng) { setTimeout(tryBind, 400); return; }
+
+    let started = false;
+    let artUrlUsed = '';
+    let artRetry = 0;
+
+    /* 封面 → 缩放到 480px 的 JPEG base64（blob: 同源直绘；http 走原生无 CORS 抓取） */
+    const shrinkArt = async (t) => {
+      let url = t.coverBlob || '';
+      if (!url && t.coverUrl && /^https?:/.test(t.coverUrl)) {
+        try {
+          const bin = await window.api.sourceBinary(t.coverUrl, {});
+          if (bin?.data && bin.data.byteLength) {
+            const blob = new Blob([bin.data], { type: bin.contentType || 'image/jpeg' });
+            url = URL.createObjectURL(blob);
+          }
+        } catch { /* 无封面也能播 */ }
+      }
+      if (!url) return { b64: null, url: '' };
+      try {
+        const img = new Image();
+        await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+        const max = 480;
+        const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(img.naturalWidth * k));
+        c.height = Math.max(1, Math.round(img.naturalHeight * k));
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        const b64 = await new Promise((res) => {
+          c.toBlob((b) => {
+            if (!b) return res(null);
+            const r = new FileReader();
+            r.onload = () => res(String(r.result).split(',')[1]);
+            r.onerror = () => res(null);
+            r.readAsDataURL(b);
+          }, 'image/jpeg', 0.82);
+        });
+        return { b64, url: t.coverBlob || t.coverUrl || '' };
+      } catch { return { b64: null, url: '' }; }
+    };
+
+    const sync = async (withArt) => {
+      const t = eng.current;
+      if (!t) {
+        if (started) { try { await MediaNotif.stop(); } catch { /* noop */ } started = false; artUrlUsed = ''; artRetry = 0; }
+        return;
+      }
+      const payload = {
+        title: String(t.title || '未知曲目').slice(0, 120),
+        artist: String(t.artist || '律动 RhythmViz').slice(0, 120),
+        playing: !!eng.playing,
+        position: Math.floor(Math.max(0, eng.time || 0) * 1000),
+        duration: Math.floor(Math.max(0, eng.duration || 0) * 1000)
+      };
+      if (withArt) {
+        const { b64, url } = await shrinkArt(t);
+        if (b64) { payload.artB64 = b64; artUrlUsed = url; }
+      }
+      try {
+        if (!started) { await MediaNotif.start(); started = true; }
+        await MediaNotif.update(payload);
+      } catch (e) { console.warn('[rv] 媒体通知同步失败', e); }
+    };
+
+    eng.addEventListener('track', () => {
+      artRetry = 0;
+      // 封面 blob 可能稍后才就绪：先立即同步一次，2.5s 内还没封面就补一次
+      sync(true);
+      setTimeout(() => {
+        const t2 = eng.current;
+        if (t2 && artRetry < 1) {
+          artRetry++;
+          const want = t2.coverBlob || t2.coverUrl || '';
+          if (want && want !== artUrlUsed) sync(true);
+        }
+      }, 2500);
+    });
+    eng.addEventListener('state', () => { sync(false); });
+
+    MediaNotif.addListener('action', ({ action }) => {
+      try {
+        if (action === 'play' || action === 'pause') eng.playPause();
+        else if (action === 'next') eng.next();
+        else if (action === 'prev') eng.prev();
+      } catch (e) { console.warn('[rv] 通知动作执行失败', action, e); }
+    });
+  };
+  tryBind();
+}
 
 /* ============================================================
    四、QQ 音乐快捷登录（本机 QQ 一键授权）

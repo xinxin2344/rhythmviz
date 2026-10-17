@@ -14,6 +14,8 @@ public class MainActivity extends BridgeActivity {
         catch (Throwable t) { Log.e("RhythmViz", "RhythmNet 插件注册失败", t); }
         try { registerPlugin(QqLoginPlugin.class); }
         catch (Throwable t) { Log.e("RhythmViz", "QqLogin 插件注册失败", t); }
+        try { registerPlugin(MediaNotifPlugin.class); }
+        catch (Throwable t) { Log.e("RhythmViz", "MediaNotif 插件注册失败", t); }
         super.onCreate(savedInstanceState);
         // 沉浸式：内容延伸到状态栏/导航栏之下（配合 Web 端 env(safe-area-inset-*) 让位）
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
