@@ -92,8 +92,7 @@ if (NODE_TEST) {
 /* 1) 打包浏览器侧 bundle */
 await build({
   entryPoints: {
-    'mobile/bridge': join(__dirname, 'src/bridge.js'),
-    'mobile/poc': join(__dirname, 'src/poc/poc.js')
+    'mobile/bridge': join(__dirname, 'src/bridge.js')
   },
   bundle: true,
   format: 'iife',

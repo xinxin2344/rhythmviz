@@ -1,7 +1,7 @@
 /* ============ 应用入口：装配引擎 / 场景 / 歌词 / UI ============ */
 import { AudioEngine, makeTrack, setOnlineHooks } from './audio.js';
 import { SceneManager } from './scenes.js';
-import { LyricRenderer } from './lyrics.js';
+import { LyricRenderer, parseYrc, parseTtml } from './lyrics.js';
 import { setupUI, toast } from './ui.js';
 import { setupSourceMgr } from './sourcemgr-ui.js';
 
@@ -38,6 +38,16 @@ class App {
   async boot() {
     // 启动页自定义背景：settings 走异步 IPC，先从 localStorage 同步兜底应用，避免启动页闪默认纯色主题
     this.applySplashBg(localStorage.getItem('spBgImg'));
+    // 启动页「银河」主题同样同步兜底：手机端 settings IPC 返回慢，等 applySplashTheme
+    // 才挂类/启动 WebGL 的话，开头会先闪一段普通默认样式（applySplashTheme 稍后幂等接管）
+    // 双键兜底：spTheme（applySplashTheme 镜像写入）+ splashGalaxyOn（早期手机端
+    // 设置页开关只写此键，曾因此漏兜底 → 银河模式每次启动开头都闪默认样式）
+    const _spGalaxyHint = localStorage.getItem('spTheme') === 'mr-galaxy'
+      || localStorage.getItem('splashGalaxyOn') === '1';
+    if (_spGalaxyHint) {
+      document.getElementById('splash')?.classList.add('sp-galaxy');
+      this._startSplashGalaxy();
+    }
     // 读取设置
     try {
       const s = await window.api.getSettings();
@@ -96,6 +106,47 @@ class App {
     setupSourceMgr(this);
     if (window.api.onSourceNotify) {
       window.api.onSourceNotify((msg) => toast(msg, 4200));
+    }
+    // 逐字对齐完成：缓存到曲目；若是当前曲目 → 立即热替换为真实人声逐字时间轴
+    if (window.api.onAlignDone) {
+      window.api.onAlignDone(({ uid, lyricJson }) => {
+        const t = this.engine.queue.find((q) => q.uid === uid);
+        const cur = this.engine.current;
+        if (!(cur && cur.uid === uid && lyricJson?.lines?.length)) return;
+        /* 人声锚定融合：yrc/TTML 已有官方字级节奏（质量高于 ASR 推理），不整轴替换——
+           用对齐结果与官方行时间的差值取中位数为整体平移量（消除音源打轴系统偏移，
+           官方逐字节奏 + 人声锚定起点，两者兼得）；行级 LRC 无字级数据 → 直接整轴替换 */
+        const raw = cur.lyricText || '';
+        const reparsed = (/^\s*\[\d+,\d+\]/m.test(raw) && parseYrc(raw))
+          || (raw.includes('<') && parseTtml(raw)) || null;
+        let finalLines = lyricJson.lines, msg = null;
+        if (reparsed?.length) {
+          const map = new Map(lyricJson.lines.map((l) => [(l.text || '').trim(), l.time]));
+          const deltas = [];
+          for (const l of reparsed) {
+            const at = map.get((l.text || '').trim());
+            if (at != null && isFinite(at)) deltas.push(at - l.time);
+          }
+          if (deltas.length >= Math.max(3, reparsed.length * 0.3)) {
+            deltas.sort((a, b) => a - b);
+            const delta = deltas[Math.floor(deltas.length / 2)];
+            if (Math.abs(delta) > 0.03 && Math.abs(delta) < 3) {
+              finalLines = reparsed.map((l) => ({
+                ...l,
+                time: l.time + delta, end: l.end + delta,
+                words: l.words?.map((w) => ({ ...w, t: w.t + delta, end: w.end + delta }))
+              }));
+              msg = `逐字歌词已人声锚定（整体校正 ${delta > 0 ? '+' : ''}${(delta * 1000).toFixed(0)}ms）`;
+            }
+          }
+        }
+        if (t) t.lyricJson = { lines: finalLines };   // 缓存最终结果：切歌回来 L808 直接复用
+        this.lyrics.setLyricData(finalLines, cur.transText);
+        toast(msg || '逐字歌词已对齐人声', msg ? 2600 : 2200);
+      });
+      window.api.onAlignFail?.(({ uid, msg }) => {
+        if (this.engine.current?.uid === uid) toast('逐字对齐失败：' + msg, 3000);
+      });
     }
     // 首次启动安全提示（合规声明：启动页结束后弹出，勾选确认一次后不再弹出）
     setTimeout(() => {
@@ -170,6 +221,20 @@ class App {
         }
         this.dismissSplash();
         document.body.classList.add('show-chrome');
+        // 支持 SHOT_SCENE=pv:<style> 指定歌词MV风格截图（如 pv:aurora，仅运行时生效不落盘）
+        const _mPv = /^pv:([a-z]+)$/.exec(scene);
+        if (_mPv) {
+          if (this.scenes.pvCfg) this.scenes.pvCfg.style = _mPv[1];
+          scene = 'pv';
+          // 演示曲无歌词：注入假歌词流便于截图验证逐字手法（每 3s 一行）
+          const demoLines = [];
+          for (let i = 0; i < 40; i++) demoLines.push({ time: i * 3, end: i * 3 + 2.6, text: '穿过人海 灯火依然明亮 ' + (i + 1) });
+          const _origSetLyr = this.scenes.setLyricState.bind(this.scenes);
+          this.scenes.setLyricState = (lines, idx, time) => {
+            if (!lines || !lines.length) _origSetLyr(demoLines, Math.min(demoLines.length - 1, Math.floor((time || 0) / 3)), time || 0);
+            else _origSetLyr(lines, idx, time);
+          };
+        }
         try {
           await this.engine.playDemo();
           await this.applyDemoTrack();
@@ -268,10 +333,12 @@ class App {
     this._splashGone = true;
     // 停止启动页 rAF（释放 CPU）
     if (this._spRaf) cancelAnimationFrame(this._spRaf);
-    this._stopSplashGalaxy();
+    // 银河释放延迟到淡出动画结束后：_stopSplashGalaxy 的 loseContext 会瞬间清空画布，
+    // 提前停会让淡出的几百 ms 里露出普通默认底（「结尾闪普通」的根因）
     // 进度先逐帧丝滑补齐 100%，再让整个 Splash 淡出（幂等，点击跳过同样适用）
     this._spRush?.();
     setTimeout(() => sp.classList.add('gone'), 380);
+    setTimeout(() => this._stopSplashGalaxy(), 1500);
   }
 
   /* ---------- 启动页「银河」预设：Mineradio 启动页 WebGL 银河背景的稳态移植 ----------
@@ -501,6 +568,8 @@ class App {
   applySplashTheme() {
     const sp = document.getElementById('splash');
     if (!sp) return;
+    // 主题镜像 localStorage：boot 早期同步兜底要读（见 boot 内注释），选了什么立刻写
+    try { localStorage.setItem('spTheme', String(this.settings?.splash ?? 'follow')); } catch { /* noop */ }
     const setHue = (v) => sp.style.setProperty('--sp-hue', String(v));
     const opt = this.settings?.splash ?? 'follow';
     // 「银河」预设：WebGL 动态背景（Mineradio 风）。标题颜色仍可由用户自定义 ——
@@ -509,10 +578,12 @@ class App {
       const gh = +this.settings?.splashGalaxyHue;
       setHue(isFinite(gh) ? gh : 165);
       sp.classList.add('sp-galaxy');
+      document.documentElement.classList.add('rv-sp-galaxy'); // 与 head 预隐藏类幂等同步
       this._startSplashGalaxy();
       return;
     }
     sp.classList.remove('sp-galaxy');
+    document.documentElement.classList.remove('rv-sp-galaxy'); // 恢复默认星尘样式
     this._stopSplashGalaxy();
     if (opt !== 'follow' && isFinite(+opt)) {
       setHue(+opt);
@@ -774,7 +845,10 @@ class App {
 
   /* ---------- 歌词 ---------- */
   setLyric(text, trans, pure) {
-    if (text) this.lyrics.setLyric(text, trans);
+    // 后端逐字对齐结果优先（真实人声时间戳）：对齐完成过的曲目重播/切回时直接使用
+    const cur = this.engine.current;
+    if (cur?.lyricJson?.lines?.length) this.lyrics.setLyricData(cur.lyricJson.lines, trans);
+    else if (text) this.lyrics.setLyric(text, trans);
     else this.lyrics.clear(pure === true); // 仅接口明确纯音乐才显示「纯音乐，请欣赏」；否则恢复默认提示
   }
 

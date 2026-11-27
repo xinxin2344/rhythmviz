@@ -10,6 +10,7 @@ import android.net.Uri;
 import android.net.http.SslError;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -36,50 +37,32 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 /**
- * QQ 音乐快捷登录：
- * 全屏 WebView 打开 QQ 音乐官方 ptlogin 授权页。手机已安装 QQ 时，
- * 页面可唤起 QQ 完成一键授权（无需第二台设备扫码）；授权后重定向链
- * 由系统 WebView 自动走完，本插件在 CookieManager 中收割 qm_keyst
- * 等业务域 Cookie 回传 JS 侧，并入音源 CookieJar。
+ * QQ 音乐账号登录（扫码形态）：全屏 WebView（桌面 UA）打开 graph 授权页，
+ * ptlogin 默认显示扫码二维码（无密码表单）；手机 QQ 扫码确认后由官方链
+ * 自动换票，CookieManager 收割 qm_keyst 回传 JS 侧并入音源 CookieJar。
+ * 确认后授权链若挂住（graph 页不跳转，用户停在「扫描成功」等待页），
+ * 检测到 QQ 顶层登录态 3.5s 仍无票据 → 主动加载 y.qq.com SPA 强制换票
+ * （桌面端同款兜底，SPA 读通用登录态自动签发 qm_keyst）→ 收割后自动关闭。
  */
 @CapacitorPlugin(name = "QqLogin")
 public class QqLoginPlugin extends Plugin {
 
+    /* 桌面 UA + display=pc（PoC 实测）：ptlogin iframe 默认显示扫码二维码
+       （「使用QQ手机版扫码登录」，86.6px 码 + 密码登录只是页内小链接）——
+       用户要求 QQ 只扫码、不要密码表单。授权上下文完整（graph show 会话）：
+       手机 QQ 扫码确认 → graph 302 wx_redirect?code 回 y.qq.com → qm_keyst
+       种 y.qq.com 域 → onPageFinished/轮询收割（checkCookies 判定不变） */
     private static final String DEFAULT_URL =
-            "https://xui.ptlogin2.qq.com/cgi-bin/xlogin"
-            + "?appid=716027609&daid=384&style=40&target=self"
-            + "&ptredirect=0&pt_no_auth=1&qlogin_auto_login=1"
-            + "&s_url=" + Uri.encode("https://y.qq.com/");
+            "https://graph.qq.com/oauth2.0/show?which=Login&display=pc&response_type=code"
+            + "&client_id=100497308"
+            + "&redirect_uri=" + Uri.encode("https://y.qq.com/portal/wx_redirect.html?login_type=1&surl=https%3A%2F%2Fy.qq.com%2Fn%2Fryqq_v2%2Fprofile")
+            + "&state=state&scope=" + Uri.encode("get_user_info,get_app_friends");
 
-    /* QQ 浏览器 UA：ptlogin 对 QQ 浏览器直接下发「QQ 一键登录」，
-       其页面 JS 走 mqqapi:// 唤起本机 QQ（而不是给普通浏览器的扫码兜底页） */
-    private static final String UA_MOBILE =
-            "Mozilla/5.0 (Linux; U; Android 13; zh-cn; Pixel 7 Build/TQ3A.230705.001) "
-            + "AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 "
-            + "Chrome/116.0.0.0 MQQBrowser/13.9 Mobile Safari/537.36";
-
-    /* 页面加载后自动触发「QQ 一键登录」：
-       1) 直接抓页面里所有 mqq/mqqapi/intent 协议链接，交给顶层导航（必走拦截器）；
-       2) 合成完整触摸序列点击 qlogin 入口（部分页面不认裸 .click()）；
-       3) 兜底按文案找「一键登录/快速登录/本机QQ」节点 */
-    private static final String JS_CLICK_QLOGIN =
-            "(function(){"
-            + "var links=document.querySelectorAll('a[href],area[href]');"
-            + "for(var k=0;k<links.length;k++){var h=links[k].href||'';"
-            + "if(/^(mqq|mqqapi|mqqopensdkapi|mqqconnect|tencent|intent):/i.test(h)){"
-            + "try{window.location.href=h;return;}catch(e){}}"
-            + "var pool=[document.getElementById('qlogin'),document.getElementById('qlogin_img'),"
-            + "document.querySelector('.quick-login'),document.querySelector('[data-type=qlogin]'),"
-            + "document.querySelector('.qlogin-btn'),document.querySelector('#qlogin_quick')];"
-            + "var nodes=document.querySelectorAll('a,div,span,button,img,li,i');"
-            + "for(var i=0;i<nodes.length;i++){var t=(nodes[i].innerText||nodes[i].title||nodes[i].alt||'');"
-            + "if(t.indexOf('一键登录')>=0||t.indexOf('快速登录')>=0||t.indexOf('本机QQ')>=0"
-            + "||t.indexOf('QQ登录')>=0){pool.push(nodes[i]);}}"
-            + "function tap(el){['pointerdown','mousedown','touchstart','pointerup','mouseup','touchend','click']"
-            + ".forEach(function(ev){var evo;try{evo=new PointerEvent(ev,{bubbles:true,cancelable:true});}"
-            + "catch(e){evo=new MouseEvent(ev,{bubbles:true,cancelable:true});}el.dispatchEvent(evo);});}"
-            + "for(var j=0;j<pool.length;j++){try{tap(pool[j]);pool[j].click&&pool[j].click();}catch(e){}}"
-            + "})();";
+    /* 桌面 Chrome UA：让 graph/ptlogin 下发 PC 版登录盒（默认扫码二维码 tab）。
+       登录协议全部由官方页 JS 执行（浏览器级上下文，风控放行），收割不受影响 */
+    private static final String UA_DESKTOP =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            + "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
     private static final String[] COOKIE_HOSTS = {
             "https://y.qq.com/",
@@ -102,6 +85,11 @@ public class QqLoginPlugin extends Plugin {
     private boolean finished = false;
     private String lastWakeUri;
     private long lastWakeAt = 0L;
+    /* 首次检测到 QQ 顶层登录态（p_skey/skey，扫码确认后 ptlogin 才种）的时刻：
+       授权链挂住时据此触发 SPA 兜底换票 */
+    private long loginCookieAt = 0L;
+    /* 登录流程开始时刻（总超时计时基准） */
+    private long startAt = 0L;
 
     /** 从 QQ 授权页返回 App 时补检 Cookie（QQ 回跳可能不触发 onPageFinished） */
     @Override
@@ -115,6 +103,12 @@ public class QqLoginPlugin extends Plugin {
         public void run() {
             if (!finished && dialog != null && dialog.isShowing()) {
                 checkCookies();
+                /* 总超时 75s：授权链彻底挂死/用户始终没确认 → 明确失败回传
+                   （JS 侧弹提示），不再无限停在等待页「没有反应」 */
+                if (!finished && SystemClock.elapsedRealtime() - startAt > 75000) {
+                    fail("登录超时：未检测到登录成功，请重试");
+                    return;
+                }
                 mainHandler.postDelayed(this, 1500);
             }
         }
@@ -144,6 +138,8 @@ public class QqLoginPlugin extends Plugin {
         cm.flush();
         lastWakeUri = null;
         lastWakeAt = 0L;
+        loginCookieAt = 0L;
+        startAt = SystemClock.elapsedRealtime(); // 75s 总超时基准
 
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -156,22 +152,12 @@ public class QqLoginPlugin extends Plugin {
         bar.setBackgroundColor(Color.parseColor("#16161c"));
 
         TextView title = new TextView(ctx);
-        title.setText("QQ 音乐快捷登录");
+        title.setText("QQ 音乐账号登录");
         title.setTextColor(Color.WHITE);
         title.setTextSize(15);
         LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         bar.addView(title, tp);
-
-        Button wake = new Button(ctx);
-        wake.setText("唤起QQ");
-        wake.setAllCaps(false);
-        wake.setTextColor(Color.WHITE);
-        wake.setBackgroundColor(Color.TRANSPARENT);
-        wake.setOnClickListener(v -> {
-            if (webView != null) webView.evaluateJavascript(JS_CLICK_QLOGIN, null);
-        });
-        bar.addView(wake);
 
         Button close = new Button(ctx);
         close.setText("取消");
@@ -187,7 +173,11 @@ public class QqLoginPlugin extends Plugin {
         ws.setDomStorageEnabled(true);
         ws.setDatabaseEnabled(true);
         ws.setCacheMode(WebSettings.LOAD_DEFAULT);
-        ws.setUserAgentString(UA_MOBILE);
+        ws.setUserAgentString(UA_DESKTOP);
+        /* 桌面 UA 的 PC 登录盒定宽 ~430px：宽视口 + 概览缩放让它整体缩放到手机屏宽，
+           二维码完整可见可扫（PoC 实测 86.6px 码 + 周边留白，缩放后清晰） */
+        ws.setUseWideViewPort(true);
+        ws.setLoadWithOverviewMode(true);
         // 关掉多窗口：所有 target=_blank / window.open 导航都走主 WebView，
         // 保证自定义协议一定经过下面的拦截器（多窗口时拦截发生在拿不到的 dummy 视图上）
         ws.setSupportMultipleWindows(false);
@@ -212,12 +202,6 @@ public class QqLoginPlugin extends Plugin {
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 checkCookies();
-                // 延迟一点等页面把快捷登录入口渲染出来，再自动点击
-                mainHandler.postDelayed(() -> {
-                    if (!finished && webView != null) {
-                        webView.evaluateJavascript(JS_CLICK_QLOGIN, null);
-                    }
-                }, 700);
             }
 
             @Override
@@ -291,6 +275,12 @@ public class QqLoginPlugin extends Plugin {
             if (qq != null) {
                 qq.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 ctx.startActivity(qq);
+            } else if (ctx != null) {
+                // 没装 QQ：明确告知用户，避免点了登录毫无反应
+                try {
+                    android.widget.Toast.makeText(ctx,
+                            "未检测到手机 QQ，请在网页内扫码或输入账号登录", android.widget.Toast.LENGTH_LONG).show();
+                } catch (Throwable ignored) { }
             }
         } catch (Exception e) {
             // 没装 QQ（ActivityNotFoundException 等）：留在网页继续账号密码/扫码登录
@@ -300,10 +290,50 @@ public class QqLoginPlugin extends Plugin {
     private void checkCookies() {
         if (finished) return;
         String yqq = CookieManager.getInstance().getCookie("https://y.qq.com/");
-        if (yqq == null) return;
-        boolean hasKey = yqq.contains("qm_keyst=") || yqq.contains("qqmusic_key=");
-        if (!hasKey) return;
-        succeed();
+        if (yqq != null) {
+            boolean hasKey = yqq.contains("qm_keyst=") || yqq.contains("qqmusic_key=");
+            if (hasKey) { succeed(); return; }
+        }
+        /* 授权链挂住兜底：手机 QQ 已确认（.qq.com 顶层种下 p_skey/skey）但
+           graph 页 3.5s 内没走到 wx_redirect（网络慢/链断）——用户会一直停在
+           「扫描成功，请在手机上确认」等待页。此时主动加载 y.qq.com SPA：
+           它读到通用登录态会自动换票签发 qm_keyst（桌面端验证过的链路），
+           后续轮询收割 → succeed → 自动关闭 WebView */
+        /* 确认态检测扩到三个域：手机 QQ 确认后 p_skey/skey 可能种在 .qq.com
+           顶层域，也可能 host-only 在 ssl/xui.ptlogin2.qq.com（getCookie 只回
+           匹配该域的 Cookie，此前只查 qq.com → confirmed 永不触发 → 用户停在
+           「请在手机上确认」等待页干等超时 = 「卡住」） */
+        boolean loginState = hasLoginCookie("https://qq.com/")
+                || hasLoginCookie("https://ssl.ptlogin2.qq.com/")
+                || hasLoginCookie("https://xui.ptlogin2.qq.com/");
+        long now = SystemClock.elapsedRealtime();
+        if (loginState) {
+            if (loginCookieAt == 0) {
+                loginCookieAt = now;
+                notifyListeners("qqStage", stage("confirmed")); // 手机已确认 → 等/换票
+            } else if (now - loginCookieAt > 2500) {
+                loginCookieAt = now; // 防重复触发；SPA 换票失败时每 2.5s 重试一次
+                notifyListeners("qqStage", stage("fallback"));
+                if (webView != null) {
+                    webView.loadUrl("https://y.qq.com/n/ryqq_v2/profile");
+                }
+            }
+        } else {
+            loginCookieAt = 0; // 尚未确认/已登出：重置
+        }
+    }
+
+    /** 该域是否存在 QQ 通用登录态 Cookie（确认后 ptlogin 种下） */
+    private boolean hasLoginCookie(String url) {
+        String c = CookieManager.getInstance().getCookie(url);
+        return c != null && (c.contains("p_skey=") || c.contains("skey="));
+    }
+
+    /** 登录阶段事件（JS 侧 toast 展示，让用户看到卡在哪一步） */
+    private JSObject stage(String s) {
+        JSObject o = new JSObject();
+        o.put("stage", s);
+        return o;
     }
 
     private void succeed() {

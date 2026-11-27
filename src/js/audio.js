@@ -9,6 +9,70 @@ export const fmtTime = (s) => {
 };
 
 let uid = 1;
+
+/* —— 逐字对齐触发：所有歌词类型（LRC / yrc / TTML）都送主进程 sherpa-onnx 人声对齐。
+   yrc/TTML 官方字级节奏保留，人声对齐结果仅用于「整体行级锚定平移」（app.js onAlignDone 中值融合），
+   行级 LRC 则直接替换为识别产出的真实人声字级时间戳 —— */
+const _alignReqSet = new Set(); // 本 session 已发起过的 uid（缓存命中由主进程秒回 align:done）
+const _LRC_TIME = /\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]/g;
+function _lrcToAlignLines(text) {
+  if (!text) return null;
+  /* yrc：行标记 [startMs,durMs]，字标记 (startMs,durMs,0) —— 提取行级时间与纯文本 */
+  if (/^\s*\[\d+,\d+\]/m.test(text)) {
+    const lines = [];
+    for (const raw of text.split(/\r\n|\r|\n/)) {
+      const m = /^\[(\d+),(\d+)\](.*)$/.exec(raw.trim());
+      if (!m) continue;
+      const content = m[3].replace(/\(\d+,\d+,\d+\)/g, '').trim();
+      if (content) lines.push({ time: +m[1] / 1000, end: (+m[1] + +m[2]) / 1000, text: content });
+    }
+    return lines.length >= 3 ? lines : null;
+  }
+  /* TTML：行标签 <p begin="...">，含字级 span —— 提取行级时间与纯文本 */
+  if (text.includes('<')) {
+    const lines = [];
+    const re = /<p\b[^>]*\bbegin="([\d.:]+)"(?:[^>]*\bend="([\d.:]+)")?[^>]*>([\s\S]*?)<\/p>/g;
+    let m;
+    while ((m = re.exec(text))) {
+      const content = m[3].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+      const t = /(\d+):(\d+):?(\d*(?:\.\d+)?)?/.exec(m[1]);
+      if (!t || !content) continue;
+      const sec = +t[1] * 60 + +t[2] + (t[3] ? parseFloat('0.' + String(t[3]).padEnd(3, '0')) : 0);
+      let end = sec + 8;
+      if (m[2]) {
+        const e = /(\d+):(\d+):?(\d*(?:\.\d+)?)?/.exec(m[2]);
+        if (e) end = +e[1] * 60 + +e[2] + (e[3] ? parseFloat('0.' + String(e[3]).padEnd(3, '0')) : 0);
+      }
+      lines.push({ time: sec, end, text: content });
+    }
+    return lines.length >= 3 ? lines : null;
+  }
+  /* 行级 LRC（无字级数据 → 对齐结果整轴替换） */
+  const lines = [];
+  for (const raw of text.split(/\r\n|\r|\n/)) {
+    _LRC_TIME.lastIndex = 0;
+    const m = _LRC_TIME.exec(raw);
+    if (!m) continue;
+    const t = +m[1] * 60 + +m[2] + (m[3] ? +(`0.${m[3]}`) : 0);
+    const content = raw.replace(_LRC_TIME, '').trim();
+    if (content && !/^(ti|ar|al|by|offset|re|ve)\s*:/i.test(content)) lines.push({ time: t, text: content });
+  }
+  for (let i = 0; i < lines.length; i++) lines[i].end = i + 1 < lines.length ? lines[i + 1].time : lines[i].time + 8;
+  return lines.length >= 3 ? lines : null;
+}
+function requestAlign(t, lyricText) {
+  try {
+    if (!window.api?.alignRequest || _alignReqSet.has(t.uid)) return;
+    const lines = _lrcToAlignLines(lyricText);
+    if (!lines) return;
+    _alignReqSet.add(t.uid);
+    const spec = t.source === 'local'
+      ? { uid: t.uid, kind: 'local', path: t.path, lines }
+      : { uid: t.uid, kind: 'online', srcId: t.srcId || 'netease', songId: t.songId, title: t.title, artist: t.artist, lines };
+    window.api.alignRequest(spec).catch(() => { /* 后端不可用静默降级 */ });
+  } catch { /* 对齐可选，不影响播放 */ }
+}
+
 export function makeTrack(partial) {
   return {
     uid: uid++,
@@ -452,6 +516,7 @@ export class AudioEngine extends EventTarget {
           t.lyricText = lr?.text || '';
           if (lr) t.transText = null;
           this._emit('lyric');
+          if (lr?.text) requestAlign(t, lr.text);
         }
       } catch { /* 标签解析失败不影响播放 */ }
     }
@@ -531,6 +596,7 @@ export class AudioEngine extends EventTarget {
       t.transText = trans;
       t.pureMusic = pure;
       this._emit('lyric');
+      if (!pure) requestAlign(t, lrc);
     }
     // 封面通用化：任意 http(s) 封面经主进程下载为 blob（规避防盗链/跨域）
     if (!t.coverBlob && t.coverUrl && !cache.cover && /^https?:/.test(t.coverUrl)) {

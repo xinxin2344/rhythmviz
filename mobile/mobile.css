@@ -57,8 +57,7 @@ html.rv-android #btnMax,
 html.rv-android #btnClose,
 html.rv-android .tb-sep,
 html.rv-android #btnFull { display: none !important; }
-/* 外观：本地图片/视频背景（无文件选择能力；渐变预设与封面氛围保留） */
-html.rv-android #btnBgPick,
+/* 外观：本地视频背景（无 file chooser 视频选取场景；图片背景已支持——pickBackground） */
 html.rv-android #btnBgVideo { display: none !important; }
 /* 高级页：本地文件导入、迷你窗、关闭行为（托盘）、音频缓存（垫片无实现） */
 html.rv-android #btnFxImport,
@@ -75,6 +74,8 @@ html.rv-android #btnImport,
 html.rv-android #btnImportDir { display: none !important; }
 /* 拖放提示 */
 html.rv-android #dropHint { display: none !important; }
+/* 舞台返回浮钮：手机端由系统返回键逐级返回（bridge.js），浮钮会在 Tab 页误显示，隐藏 */
+html.rv-android #btnStageBack { display: none !important; }
 
 /* 顶部标题栏：去掉右侧窗口按钮后收紧，预留状态栏安全区 */
 html.rv-android #titlebar {
@@ -108,11 +109,27 @@ html.rv-portrait #home {
   padding: calc(58px + var(--sat)) 12px calc(168px + var(--sab));
   align-items: stretch;
 }
-html.rv-portrait .home-hero { margin-top: 2px; }
-html.rv-portrait .home-kicker { font-size: 9px; letter-spacing: 0.34em; margin-bottom: 8px; }
-html.rv-portrait .home-greet { font-size: 30px; }
-html.rv-portrait #homeTime { font-size: 28px; }
+html.rv-portrait .home-hero { margin-top: 4px; }
+/* 顶部 hero：大问候 + 发光时钟，消除「顶部空旷」 */
+html.rv-portrait .home-kicker {
+  font-size: 9px; letter-spacing: 0.34em; margin-bottom: 8px;
+  color: rgba(var(--accent-rgb, 168, 139, 250), 0.9);
+}
+html.rv-portrait .home-greet {
+  font-size: 33px; font-weight: 800; letter-spacing: 0.01em;
+  background: linear-gradient(180deg, #ffffff 32%, rgba(255, 255, 255, 0.52));
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 8px 26px rgba(var(--accent-rgb, 168, 139, 250), 0.22));
+}
+html.rv-portrait #homeTime {
+  font-size: 38px; font-weight: 700;
+  text-shadow: 0 0 36px rgba(var(--accent-rgb, 168, 139, 250), 0.45);
+}
 html.rv-portrait #homeDate { font-size: 12px; }
+html.rv-portrait .clock-dot { opacity: 0.45; }
+/* hero 光斑在手机上收窄铺满屏宽，氛围更聚拢 */
+html.rv-android .home-hero::before { width: min(92vw, 560px); height: 260px; opacity: 0.9; }
 
 html.rv-portrait .home-search,
 html.rv-portrait .home-rail,
@@ -281,17 +298,18 @@ html.rv-android #btnFxLyric,
 html.rv-android #btnFullLyric,
 html.rv-android #btnFocus { display: none !important; }
 
-/* ---- 底部三 Tab ---- */
+/* ---- 底部三 Tab：悬浮雾面玻璃圆角条（四角圆弧，脱离屏幕边缘悬浮） ---- */
 html.rv-android #rvTabbar {
   position: fixed; z-index: 200;
-  left: 0; right: 0; bottom: 0;
-  height: calc(60px + var(--sab));
-  padding-bottom: var(--sab);
+  left: 12px; right: 12px; bottom: calc(10px + var(--sab));
+  height: 60px;
   display: flex;
-  background: rgba(12, 12, 16, 0.94);
-  backdrop-filter: blur(22px);
-  -webkit-backdrop-filter: blur(22px);
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 22px;
+  background: rgba(18, 18, 26, 0.42);
+  backdrop-filter: blur(26px) saturate(1.5);
+  -webkit-backdrop-filter: blur(26px) saturate(1.5);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.38), 0 2px 10px rgba(0, 0, 0, 0.22);
 }
 html.rv-android .rv-tab {
   flex: 1; border: 0; background: none;
@@ -302,8 +320,8 @@ html.rv-android .rv-tab {
 html.rv-android .rv-tab-ic { font-size: 20px; }
 html.rv-android .rv-tab.on { color: var(--accent, #a78bfa); }
 
-/* 播放 dock 抬到 Tab 栏之上 */
-html.rv-android #bottombar { bottom: calc(60px + var(--sab)); }
+/* 播放 dock 抬到悬浮 Tab 栏之上（Tab 栏 bottom 10px + 高 60px → dock 底 84px 留 14px 间隙） */
+html.rv-android #bottombar { bottom: calc(84px + var(--sab)); }
 
 /* ---- Tab 内容分区（只显示当前 Tab 的内容，杜绝主页横向滑动） ---- */
 html.rv-android body:not(.rv-tab-home) .home-hero,
@@ -317,6 +335,24 @@ html.rv-android body:not(.rv-tab-mine) #myPlSec { display: none !important; }
 
 /* 首页 / 我的底部让位：dock + tabbar */
 html.rv-android #home { padding-bottom: calc(172px + var(--sab)); }
+
+/* ---- 自定义背景可读性：手机加暗化遮罩（亮图背景下白字/卡片看不清）----
+   遮罩浓度走 --bg-veil（设置页「背景清晰度」滑块实时可调，0=完全看清背景）。
+   用独立遮罩层 + opacity 写法（rgba() 里嵌 var() 部分老 WebView 解析失败）。
+   注意：自定义图片背景只作用于主页 —— 播放页永远用封面取色氛围渐变
+   （#np 不透底，np-open 时盖住 #userBg 是预期行为） */
+html.rv-android { --bg-veil: 0.35; }
+html.rv-android body.user-bg #userBg::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: #07090d;
+  opacity: var(--bg-veil, 0.35);
+  pointer-events: none;
+}
+/* 隐藏桌面氛围滑块「背景模糊/背景亮度」：它们只服务 albumBg 光晕，
+   默认 blur(90px)+亮度42% 会把自定义图片背景糊成一团（手机端 ui.js 已
+   不再对 #userBg 挂 filter），留着只会误导用户当成「清晰度」去拖 */
+html.rv-android .fx-slider.mood-bg { display: none !important; }
 
 /* ---- 信息流：全部改为竖向歌曲行（禁止 rail 横向滚动） ---- */
 html.rv-android .rail-row {
@@ -360,8 +396,9 @@ html.rv-android .home-pl .pl-grid {
   gap: 10px;
 }
 
-/* ---- 我的页：账号卡 ---- */
-html.rv-android #rvAccount {
+/* ---- 我的页：账号卡 / 设置入口卡 ---- */
+html.rv-android #rvAccount,
+html.rv-android #rvMineSet {
   display: flex; align-items: center; gap: 12px;
   width: 100%;
   margin-bottom: 12px;
@@ -372,6 +409,7 @@ html.rv-android #rvAccount {
   border-radius: 16px;
   text-align: left;
 }
+html.rv-android #rvMineSet:active { background: rgba(255, 255, 255, 0.09); }
 html.rv-android .rva-ic { font-size: 22px; }
 html.rv-android .rva-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 html.rv-android .rva-meta b { font-size: 14.5px; }
@@ -436,20 +474,56 @@ html.rv-android .rvp-txt i {
 }
 html.rv-android .rvp-empty { padding: 30px 0; text-align: center; color: #8f8f99; font-size: 13px; }
 
-/* ---- 登录弹层：QQ 一键登录按钮 ---- */
-html.rv-android .rv-qq-quick {
-  display: flex; align-items: center; gap: 12px;
-  width: 100%; padding: 13px 15px; margin-bottom: 14px;
-  border: 0; border-radius: 16px;
-  color: #fff;
-  background: linear-gradient(135deg, #2a96ff, #0b5fd0);
-  box-shadow: 0 8px 22px rgba(29, 126, 255, 0.28);
-  text-align: left;
+/* ---- 登录弹层：账号密码登录入口 ---- */
+html.rv-android .rv-pwd-block { margin-top: 14px; }
+html.rv-android .rv-pwd-label {
+  font-size: 10px; letter-spacing: 2px; color: #8f8f99;
+  margin: 0 2px 8px;
 }
-html.rv-android .rv-qq-ic { font-size: 22px; }
-html.rv-android .rv-qq-tx { display: flex; flex-direction: column; gap: 2px; }
-html.rv-android .rv-qq-tx b { font-size: 15px; }
-html.rv-android .rv-qq-tx i { font-size: 11px; font-style: normal; opacity: 0.92; }
+html.rv-android .rv-pwd-row { display: flex; gap: 10px; }
+html.rv-android .rv-pwd-btn {
+  flex: 1; display: flex; align-items: center; gap: 10px;
+  padding: 12px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff; text-align: left;
+}
+html.rv-android .rv-pwd-btn:active { background: rgba(255, 255, 255, 0.1); }
+html.rv-android .rv-pwd-ic { font-size: 20px; }
+html.rv-android .rv-pwd-tx { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+html.rv-android .rv-pwd-tx b { font-size: 14px; }
+html.rv-android .rv-pwd-tx i {
+  font-size: 10px; font-style: normal; color: #8f8f99;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ---- 登录弹层：网易云密码表单 ---- */
+html.rv-android #rvPwdView { padding: 6px 2px 2px; }
+html.rv-android .rv-pwd-form { display: flex; flex-direction: column; gap: 12px; }
+html.rv-android .rv-pwd-in {
+  width: 100%; padding: 13px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 13px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff; font-size: 15px; outline: none;
+  box-sizing: border-box;
+}
+html.rv-android .rv-pwd-in:focus { border-color: rgba(224, 68, 68, 0.65); }
+html.rv-android .rv-pwd-in::placeholder { color: #6d6d78; }
+html.rv-android .rv-pwd-status { min-height: 16px; font-size: 12px; color: #8f8f99; }
+html.rv-android .rv-pwd-status.warn { color: #ff7b7b; }
+html.rv-android .rv-pwd-go {
+  width: 100%; padding: 13px 0;
+  border: 0; border-radius: 999px;
+  background: linear-gradient(135deg, #e04444, #b81f1f);
+  color: #fff; font-size: 15px; letter-spacing: 4px;
+  box-shadow: 0 8px 22px rgba(224, 68, 68, 0.3);
+}
+html.rv-android .rv-pwd-go:disabled { opacity: 0.55; }
+html.rv-android .rv-pwd-back {
+  align-self: center; padding: 6px 14px;
+  border: 0; background: none;
+  color: #8f8f99; font-size: 12px;
+}
 
 /* ---- 轻提示 ---- */
 html.rv-android #rvToast {
@@ -591,42 +665,8 @@ html.rv-android .rail-item .ri-artist { grid-column: 2 !important; font-size: 10
 /* ---- 迷你控制条：没在放歌时整条隐藏 ---- */
 html.rv-android body:not(.rv-has-track) #bottombar { display: none !important; }
 
-/* ---- 播放页：底部 Tab 栏隐藏，控制条变成播放页专用整行（封面/歌名让位给唱片区） ---- */
+/* ---- 播放页：底部 Tab 栏隐藏（控制条由 v1.2 终版段接管） ---- */
 html.rv-android body.np-open #rvTabbar { display: none !important; }
-html.rv-android body.np-open #bottombar {
-  bottom: 0 !important; border-radius: 0 !important;
-  transition: transform 0.25s ease;
-}
-html.rv-android body.np-open #np .np-inner {
-  padding-bottom: calc(104px + var(--sab)) !important;
-  transition: padding-bottom 0.25s ease;
-}
-html.rv-android body.np-open .bb-inner {
-  display: flex !important; align-items: center; justify-content: center;
-  padding: 8px calc(20px + var(--sal)) calc(12px + var(--sab)) !important;
-}
-html.rv-android body.np-open .bb-left { display: none !important; }
-html.rv-android body.np-open .bb-center {
-  flex: 0 1 auto !important; margin: 0 auto !important;
-  display: flex !important; align-items: center; justify-content: center;
-  gap: clamp(8px, 5vw, 26px);
-}
-html.rv-android body.np-open .bb-right { display: none !important; }
-/* 沉浸模式：点唱片隐藏控制条，歌词区下探到底 */
-html.rv-android body.np-open.rv-np-chrome-off #bottombar { transform: translateY(100%); }
-html.rv-android body.np-open.rv-np-chrome-off #np .np-inner {
-  padding-bottom: calc(18px + var(--sab)) !important;
-}
-html.rv-android body.np-open #btnShuffle,
-html.rv-android body.np-open #btnPrev,
-html.rv-android body.np-open #btnNext {
-  display: inline-flex !important; align-items: center; justify-content: center;
-  width: 48px !important; height: 48px !important; font-size: 20px !important;
-  background: none !important; border: 0 !important; color: rgba(255,255,255,0.92) !important;
-}
-html.rv-android body.np-open #btnPlay {
-  width: 58px !important; height: 58px !important; font-size: 21px !important;
-}
 
 /* ---- 歌词不跳动：关掉鼓点缩放/弹跳/心跳动画，只保留平滑上滚与逐字变色 ---- */
 html.rv-android #lyrics .lyric-line,
@@ -667,14 +707,15 @@ html.rv-android #rvPlView .rvp-list {
 html.rv-android #rvPlView .rvp-row {
   display: flex; flex-direction: column;
   width: 100%; min-width: 0;
-  padding: 0; overflow: hidden;
+  padding: 0; overflow: visible; /* hidden 会使行的轨道尺寸贡献塌缩，行被均分容器高度压成条纹 */
   background: rgba(255, 255, 255, 0.05);
   border: 0; border-radius: 12px;
 }
 html.rv-android #rvPlView .rvp-row:active { background: rgba(255, 255, 255, 0.1); }
 html.rv-android #rvPlView .rvp-cov {
   display: block; width: 100%; aspect-ratio: 1 / 1;
-  object-fit: cover; border-radius: 0;
+  object-fit: cover;
+  border-radius: 12px 12px 0 0; /* 行 overflow 已放开，顶部圆角由封面自己裁 */
   background: #1c1c24;
 }
 html.rv-android #rvPlView .rvp-cov-empty {
@@ -687,3 +728,415 @@ html.rv-android #rvPlView .rvp-txt {
 html.rv-android #rvPlView .rvp-txt b { font-size: 12.5px; }
 html.rv-android #rvPlView .rvp-txt i { font-size: 10.5px; }
 html.rv-android #rvPlView .rvp-empty { grid-column: 1 / -1; }
+
+/* ============================================================
+   七、v1.1.4 真机反馈（四）：启动页 / 初始背景 / 控制器升级
+   ============================================================ */
+
+/* ---- 1. 启动页必须完全盖住底部 Tab 栏（Tab z-index 200 < 600） ---- */
+html.rv-android #splash { z-index: 600; }
+/* 双保险：启动页 DOM 还在（未 .gone）时直接隐藏 Tab 栏，杜绝透出与误触 */
+html.rv-android body:has(#splash:not(.gone)) #rvTabbar { display: none !important; }
+
+/* ---- 2. 初始背景：高级感深空渐变（星云紫 + 微青辉光，替代纯黑） ----
+   用户自选背景/渐变预设时由 #userBg 覆盖，此为无自定义时的底色 */
+html.rv-android body {
+  background:
+    radial-gradient(90% 52% at 84% -6%, rgba(124, 92, 255, 0.17), transparent 62%),
+    radial-gradient(70% 42% at 6% 2%, rgba(0, 210, 190, 0.10), transparent 58%),
+    radial-gradient(120% 55% at 50% 116%, rgba(255, 70, 110, 0.08), transparent 62%),
+    linear-gradient(180deg, #0d0e16 0%, #090a10 46%, #060609 100%);
+}
+/* 渐变底上提升卡片对比度（玻璃描边更清晰） */
+html.rv-android .home-rail,
+html.rv-android .home-pl {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.018));
+  border-color: rgba(255, 255, 255, 0.075);
+}
+
+/* ============================================================
+   七、v1.2 手机播放页终版（悬浮玻璃控制 dock / 沉浸播放页 / 橙色根除）
+   ============================================================ */
+
+/* ---- 0. 播放页沉浸：隐藏桌面标题栏（返回用 np-back，解决重影） ---- */
+html.rv-android body.np-open #titlebar { display: none !important; }
+html.rv-android body.np-open #np { padding-top: 0 !important; }
+/* 返回钮圆钮化：隐藏「返回」二字（与歌名重叠），只留 ‹ 符号 + 玻璃圆底 */
+html.rv-android .np-back {
+  font-size: 0 !important;
+  width: 40px !important; height: 40px !important;
+  min-width: 0 !important; padding: 0 !important;
+  border-radius: 50% !important;
+  display: inline-flex !important; align-items: center; justify-content: center;
+  background: rgba(16, 15, 24, 0.5) !important;
+  backdrop-filter: blur(16px) saturate(1.3);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 4px 14px rgba(0, 0, 0, 0.35) !important;
+}
+html.rv-android .np-back::before {
+  content: '‹';
+  font-size: 24px; line-height: 1; color: #fff;
+  transform: translateY(-1px);
+}
+
+/* ---- 1+2. 播放页控制区：通透终稿（参考图二：无底条无玻璃容器，
+       进度行 + 五键纯图标直浮封面取色氛围背景；迷你条沿用桌面玻璃不受影响） ---- */
+html.rv-android body.np-open #bottombar {
+  left: 0 !important;
+  right: 0 !important;
+  width: 100% !important;
+  bottom: 0 !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  border: 0 !important;
+  background: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  overflow: visible;
+}
+html.rv-android body.np-open #np .np-inner {
+  padding-bottom: calc(116px + var(--sab)) !important;
+}
+/* 进度行（时间 · 轨道 · 时间）：bridge 已把 #curTime/#durTime 移入 #progressBar
+   （DOM: [curTime, seekPlayed, seekKnob, durTime]）。grid 三列排布：absolute 的
+   seekKnob 不占 grid 位，其余三子元素正好落满三列，时间贴轨道两端。
+   v1.1.1 段把 #progressBar 钉成迷你条顶部 3px 细线（absolute+3px!important）——
+   全部 !important 复位。position 必须 relative 而非 static：static 会让 absolute
+   圆点失去定位基准、跑进下方按钮区（上一版「圆点跑位到播放键旁」的根因） */
+html.rv-android body.np-open #progressBar {
+  position: relative !important;
+  top: auto !important; left: auto !important; right: auto !important;
+  height: 24px !important;
+  margin: 0 26px !important;
+  display: grid !important;
+  grid-template-columns: auto 1fr auto !important;
+  align-items: center;
+  gap: 10px;
+  background: transparent !important;
+}
+html.rv-android body.np-open #progressBar .time {
+  font-size: 10.5px; color: rgba(255, 248, 240, 0.62); text-align: center;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.45);
+}
+html.rv-android body.np-open #seekPlayed {
+  height: 4px !important;
+  align-self: center;
+  border-radius: 999px !important;
+  box-shadow: none !important;   /* 网易云式纯净细线，无发光 */
+}
+/* 触屏 :hover 粘滞 / 拖动 dragging：压掉桌面样式的白色底槽——
+   24px 高的圆角白槽包住进度条就是「进度条有框」的观感 */
+html.rv-android body.np-open #progressBar:hover,
+html.rv-android body.np-open #progressBar.dragging {
+  background: none !important;
+}
+/* 拖动圆点：v1.1.1 迷你条上隐藏，播放页恢复显示并钉在轨道中线上
+   （absolute 相对 #progressBar 定位基准，top 50% + 平移 = 轨道几何中心） */
+html.rv-android body.np-open #seekKnob {
+  position: absolute !important;
+  display: block !important;
+  top: 50% !important;
+  transform: translate(-50%, -50%) scale(1) !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35) !important;
+}
+/* 控制行：[shuffle] …… [prev · play · next 居中对称] …… [list] */
+html.rv-android body.np-open .bb-inner {
+  display: flex !important; align-items: center; position: relative;
+  height: 74px;
+  padding: 0 24px !important;
+  background: none !important; border-top: 0 !important; box-shadow: none !important;
+}
+html.rv-android body.np-open .bb-left,
+html.rv-android body.np-open .bb-right,
+html.rv-android body.np-open .bb-meta { display: none !important; }
+html.rv-android body.np-open #btnShuffle {
+  position: absolute !important;
+  left: calc(18px + var(--sal)); top: 50%;
+  transform: translateY(-50%);
+  margin: 0 !important;
+}
+html.rv-android body.np-open #btnList {
+  position: absolute !important;
+  right: calc(18px + var(--sar)); top: 50%;
+  transform: translateY(-50%);
+  margin: 0 !important;
+}
+html.rv-android body.np-open .bb-center {
+  flex: 1 !important;
+  display: flex !important; align-items: center;
+  justify-content: center; gap: 26px;
+}
+/* 居中大播放键：纯图标（奶油白，无任何底/边/影容器） */
+html.rv-android body.np-open #btnPlay {
+  width: 68px !important; height: 68px !important; font-size: 30px !important;
+  display: inline-flex !important; align-items: center; justify-content: center;
+  margin: 0 !important; padding: 0 !important; text-indent: 3px;
+  background: none !important; border: 0 !important; box-shadow: none !important;
+  backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+  color: rgba(255, 248, 240, 0.96) !important;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.38);
+}
+/* 两侧四键：同款纯图标小一号 */
+html.rv-android body.np-open #btnShuffle,
+html.rv-android body.np-open #btnPrev,
+html.rv-android body.np-open #btnNext,
+html.rv-android body.np-open #btnList {
+  display: inline-flex !important; align-items: center; justify-content: center;
+  width: 46px !important; height: 46px !important; font-size: 20px !important;
+  border-radius: 50% !important;
+  background: none !important; border: 0 !important; box-shadow: none !important;
+  backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+  color: rgba(255, 248, 240, 0.88) !important;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.35);
+}
+html.rv-android body.np-open #btnShuffle.on {
+  color: #ffffff !important;
+  text-shadow: 0 0 16px rgba(255, 255, 255, 0.55), 0 1px 8px rgba(0, 0, 0, 0.35);
+}
+
+/* ---- 2b. 播放页背景：随封面取色的氛围渐变（bridge.js 采样封面写入
+       body 变量 --npA-rgb / --npB-rgb；低透明度双色叠深底，保证歌词/图标可读） ---- */
+html.rv-android body.np-open #np {
+  background:
+    radial-gradient(120% 78% at 18% -4%, rgba(var(--npA-rgb, 96, 72, 168), 0.60), transparent 62%),
+    radial-gradient(130% 88% at 88% 12%, rgba(var(--npB-rgb, 196, 92, 128), 0.42), transparent 58%),
+    radial-gradient(170% 120% at 50% 112%, rgba(var(--npA-rgb, 96, 72, 168), 0.32), transparent 62%),
+    linear-gradient(180deg, #0e0b14 0%, #08070d 58%, #050408 100%) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* ---- 3. Tab 页迷你条：悬浮在 Tab 栏上方（避免被遮挡）玻璃胶囊 ---- */
+html.rv-android body:not(.np-open).rv-has-track #bottombar {
+  left: calc(12px + var(--sal)) !important;
+  right: calc(12px + var(--sar)) !important;
+  width: auto !important;
+  bottom: calc(72px + var(--sab)) !important;
+  border-radius: 20px !important;
+  border: 1px solid rgba(255, 255, 255, 0.10) !important;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.02) 50%),
+    rgba(12, 11, 18, 0.72) !important;
+  backdrop-filter: blur(26px) saturate(1.45) !important;
+  -webkit-backdrop-filter: blur(26px) saturate(1.45) !important;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.10) !important;
+}
+/* 迷你条竖屏布局沿用桌面两行 grid（v1.1.0 段已定义），仅收进度条间距；
+   时间 span 已被 bridge 移入进度行，迷你条时隐藏不留空位 */
+html.rv-android body:not(.np-open) #progressBar { margin: 0 14px; }
+html.rv-android body:not(.np-open) #progressBar .time { display: none; }
+/* 首页内容底部留出「迷你条 + Tab 栏」的叠层空间 */
+html.rv-android body.rv-tab-home #home {
+  padding-bottom: calc(236px + var(--sab)) !important;
+}
+
+/* ---- 4. 黑胶 ⇄ 歌词切换式视图（网易云式：一次只显示一种） ----
+   默认 = 纯黑胶唱片（歌词区隐藏，封面放大居中）；
+   rv-np-lyrics = 纯歌词（封面藏，歌名/喜欢/加歌单保留在顶部） */
+html.rv-android body.np-open #np .np-right { display: none !important; }
+html.rv-android body.np-open #np .np-inner {
+  grid-template-rows: minmax(0, 1fr) !important;
+  place-items: center;
+}
+/* 黑胶视图：封面放大成主视觉 */
+html.rv-android body.np-open:not(.rv-np-lyrics) .np-cover-wrap {
+  width: min(66vw, 272px) !important;
+}
+html.rv-android body.np-open:not(.rv-np-lyrics) #npCover { border-radius: 50% !important; }
+/* 歌词视图：np-left 顶部只留歌名/歌手/操作，歌词铺满 */
+html.rv-android body.np-open.rv-np-lyrics #np .np-right {
+  display: flex !important;
+  flex: 1 1 auto !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: 0 !important;
+}
+html.rv-android body.np-open.rv-np-lyrics #np .np-inner {
+  grid-template-rows: auto minmax(0, 1fr) !important;
+  place-items: stretch start;
+  overflow-y: hidden !important;
+}
+html.rv-android body.np-open.rv-np-lyrics .np-left {
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 8px !important;
+  width: 100% !important;
+}
+html.rv-android body.np-open.rv-np-lyrics .np-cover-wrap { display: none !important; }
+html.rv-android body.np-open.rv-np-lyrics .np-meta { text-align: center; }
+html.rv-android body.np-open.rv-np-lyrics .np-acts { justify-content: center; }
+
+/* ---- 5. 卡拉OK扫光：默认关（设置页可开 body.rv-karaoke-on） ----
+   关 = 撤销扫光样式 + 恢复「亮暗两级」行高亮（网易云非扫光模式观感）；
+   开 = 恢复桌面逐字扫光。
+   注意：扫光文字是「透明 + background 渐变裁剪」显示的（app.css 的
+   .char/.tline 都是 -webkit-text-fill-color:transparent）——「关」不能
+   只把 --lit/--cp 打满（行级 kara 的 position-x 按 --lit 计算，999 会把
+   背景推到 -99800%，文字全灭 =「关扫光后歌词消失」的根因）；
+   且恢复成 inherit 色会让 active 行与普通行同色 =「当前句不高亮」，
+   必须显式亮暗两级 */
+html.rv-android body:not(.rv-karaoke-on) #lyrics .lyric-line.active .tline,
+html.rv-android body:not(.rv-karaoke-on) #lyrics .lyric-line.active .tline .char {
+  background: none !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: currentcolor !important;
+  text-shadow: 0 0 22px rgba(var(--amb-rgb, 200, 210, 255), 0.5),
+               0 2px 14px rgba(0, 0, 0, 0.45) !important;
+}
+html.rv-android body:not(.rv-karaoke-on) #lyrics .lyric-line:not(.active) .tline,
+html.rv-android body:not(.rv-karaoke-on) #lyrics .lyric-line:not(.active) .tline .char {
+  background: none !important;
+  color: rgba(232, 236, 239, 0.38) !important;
+  -webkit-text-fill-color: currentcolor !important;
+  text-shadow: none !important;
+}
+
+/* ---- 6. 手机专属设置页（bridge 注入 #rvSettings，网易云式全屏列表） ---- */
+html.rv-android #rvSettings {
+  position: fixed; inset: 0; z-index: 420;
+  background: linear-gradient(180deg, #12101c 0%, #0b0a12 60%, #08070d 100%);
+  display: none; flex-direction: column;
+  overflow: hidden;
+}
+html.rv-android #rvSettings.rvs-open { display: flex; }
+html.rv-android #rvSettings .rvs-head {
+  flex: none; display: flex; align-items: center; gap: 10px;
+  padding: calc(10px + var(--sat)) 14px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+html.rv-android #rvSettings .rvs-back {
+  width: 36px; height: 36px; border: 0; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08); color: #fff; font-size: 16px;
+}
+html.rv-android #rvSettings .rvs-title { font-size: 16px; font-weight: 700; color: #fff; }
+html.rv-android #rvSettings .rvs-body {
+  flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: 14px 14px calc(30px + var(--sab));
+}
+html.rv-android #rvSettings .rvs-group {
+  font-size: 11px; letter-spacing: 0.2em; color: rgba(168, 139, 250, 0.85);
+  margin: 16px 4px 8px;
+}
+html.rv-android #rvSettings .rvs-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 16px;
+  overflow: hidden;
+}
+html.rv-android #rvSettings .rvs-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.045);
+}
+html.rv-android #rvSettings .rvs-row:last-child { border-bottom: 0; }
+html.rv-android #rvSettings .rvs-label { flex: 1; font-size: 14px; color: #eceaf4; }
+html.rv-android #rvSettings .rvs-note { font-size: 11px; color: rgba(255, 255, 255, 0.42); margin-top: 3px; }
+/* 玻璃开关 */
+html.rv-android #rvSettings .rvs-sw {
+  flex: none; width: 46px; height: 26px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  position: relative; transition: background 0.2s;
+}
+html.rv-android #rvSettings .rvs-sw::after {
+  content: ''; position: absolute; top: 2px; left: 2px;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: #fff; opacity: 0.85;
+  transition: transform 0.2s cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+html.rv-android #rvSettings .rvs-sw.on { background: rgba(168, 139, 250, 0.75); border-color: rgba(168, 139, 250, 0.8); }
+html.rv-android #rvSettings .rvs-sw.on::after { transform: translateX(20px); background: #fff; }
+/* 色板圆点 */
+html.rv-android #rvSettings .rvs-dots { display: flex; flex-wrap: wrap; gap: 12px; padding: 12px 14px 14px; }
+html.rv-android #rvSettings .rvs-dot {
+  width: 30px; height: 30px; border-radius: 50%;
+  border: 2px solid transparent; position: relative;
+}
+html.rv-android #rvSettings .rvs-dot.on { border-color: #fff; box-shadow: 0 0 0 3px rgba(255,255,255,0.15); }
+html.rv-android #rvSettings .rvs-dot.follow {
+  background: conic-gradient(#f66, #fc6, #6f9, #6cf, #96f, #f6a, #f66);
+}
+html.rv-android #rvSettings .rvs-dot.follow::after {
+  content: '随'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 10px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.7);
+}
+/* 渐变背景预设圆点（横滑） */
+html.rv-android #rvSettings .rvs-presets {
+  display: flex; gap: 10px; overflow-x: auto; -webkit-overflow-scrolling: touch;
+  padding: 12px 14px 14px; scrollbar-width: none;
+}
+html.rv-android #rvSettings .rvs-presets::-webkit-scrollbar { display: none; }
+html.rv-android #rvSettings .rvs-preset {
+  flex: none; width: 52px; height: 52px; border-radius: 14px;
+  border: 2px solid transparent; position: relative;
+}
+html.rv-android #rvSettings .rvs-preset.on { border-color: #a78bfa; box-shadow: 0 0 12px rgba(168,139,250,0.5); }
+html.rv-android #rvSettings .rvs-preset i {
+  position: absolute; left: 50%; bottom: 3px; transform: translateX(-50%);
+  font-size: 9px; font-style: normal; color: rgba(255,255,255,0.85); text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+  white-space: nowrap;
+}
+/* 自定义颜色背景：取色器 + 应用 */
+html.rv-android #rvSettings .rvs-colors {
+  display: flex; align-items: center; gap: 14px; padding: 12px 14px 14px;
+}
+html.rv-android #rvSettings .rvs-colors label {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; color: rgba(255,255,255,0.6);
+}
+html.rv-android #rvSettings .rvs-colors input[type="color"] {
+  width: 40px; height: 40px; border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 12px; background: none; padding: 2px;
+}
+html.rv-android #rvSettings .rvs-apply {
+  margin-left: auto; padding: 9px 18px; border: 0; border-radius: 999px;
+  background: linear-gradient(135deg, #8b5cf6, #a78bfa);
+  color: #fff; font-size: 13px; font-weight: 600;
+}
+
+/* ---- 8. 首页顶部招呼区（bridge 注入 #rvHeroTop，替代桌面 .home-hero） ----
+   桌面 hero 在手机端部分时序下被 home-active 链路隐藏 → 直接藏掉，用自注入区保证可见 */
+html.rv-android body.rv-tab-home .home-hero { display: none !important; }
+html.rv-android body:not(.rv-tab-home) #rvHeroTop,
+html.rv-android body:not(.rv-tab-home) #rvHeroChips { display: none !important; }
+html.rv-android #rvHeroTop { width: 100%; margin: 2px 0 0; text-align: center; }
+html.rv-android #rvHeroTop .rvh-kicker {
+  font-size: 9px; letter-spacing: 0.34em; margin-bottom: 8px;
+  color: rgba(168, 139, 250, 0.9);
+}
+html.rv-android #rvHeroTop .rvh-greet {
+  font-size: 32px; font-weight: 800; line-height: 1.15; color: #fff;
+  text-shadow: 0 6px 30px rgba(168, 139, 250, 0.35);
+}
+html.rv-android #rvHeroTop .rvh-clock {
+  display: flex; flex-direction: column; align-items: center; gap: 2px; margin-top: 4px;
+}
+html.rv-android #rvHeroTop #rvTime {
+  font-size: 30px; font-weight: 700; color: #fff; line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 28px rgba(168, 139, 250, 0.55);
+}
+html.rv-android #rvHeroTop #rvDate { font-size: 12px; color: rgba(255, 255, 255, 0.55); }
+
+/* ---- 7. 首页顶部快捷入口 chips（填在招呼区下方，消除顶部空旷感） ---- */
+html.rv-android #rvHeroChips {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  width: 100%; margin: 4px 0 -6px;
+}
+html.rv-android #rvHeroChips button {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 12px 4px 10px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 15px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.88);
+}
+html.rv-android #rvHeroChips button b { font-size: 17px; line-height: 1; }
+html.rv-android #rvHeroChips button span { font-size: 10px; color: rgba(255, 255, 255, 0.55); letter-spacing: 0.02em; }
+html.rv-android #rvHeroChips button:active {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.14);
+}

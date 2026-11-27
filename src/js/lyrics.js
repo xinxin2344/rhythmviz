@@ -241,6 +241,60 @@ function wordToChars(w) {
   return out;
 }
 
+/** 行级 LRC 演唱段窗口估算 —— 卡拉OK同步核心
+ *  纯 LRC 只有行起点，line.end 被拉到下一行起点（间奏/等待全在窗口内）；
+ *  扫光若铺满整窗，人声早唱完、光还在间奏里慢慢走（=跟不上 + 等待时间加入逐字）。
+ *  这里按字符类型估算真实演唱段时长：CJK 0.27s/字、拉丁字母/数字 0.085s/字符、
+ *  空格 0.04s、标点 0.06s，尾音余量 +0.25s，再 clamp 到行可用窗口内。
+ *  不伪造任何字级时间戳——行级扫光仍是整行同步推进（line-kara 语义不变）。 */
+export function lyricSingWindow(line) {
+  const T = line.time, E = Math.max(T + 0.3, line.end != null ? line.end : T + 0.3);
+  const win = E - T;
+  let d = 0.25; // 尾音余量
+  for (const ch of String(line.text || '')) {
+    if (/\s/.test(ch)) d += 0.04;
+    else if (/[㐀-鿿豈-﫿぀-ヿ가-힯]/.test(ch)) d += 0.27; // CJK 统一表意文字 + 假名 + 谚文
+    else if (/[A-Za-z0-9]/.test(ch)) d += 0.085;
+    else d += 0.06; // 标点/符号
+  }
+  return Math.min(win, Math.max(0.7, d));
+}
+
+/** 卡拉OK统一进度 —— 所有消费方（歌词面板 / 舞台悬浮歌词 / 场景大字歌词）共用同一算法
+ *  字级（YRC/TTML 真实人声时间戳）：严格按时间戳推进；字间空洞期扫光停在字边界
+ *    （不填充、不提前），人声停扫光停；
+ *  行级（纯 LRC）：整行同步扫光，窗口 = lyricSingWindow（不含行间等待）。
+ *  返回 { litChars, prog01, sing, wordLevel }
+ *    litChars：已点亮字符数（浮点，含进行中插值）；行级 = prog01 × 字数（供 px 换算）
+ *    prog01：0..1 整行进度（行级 = 扫光进度；字级 = litChars/字数）
+ *    sing：正在唱的字索引（字级且 time 落在某字窗口内），无则 -1 —— 弹跳绝不提前落下一字 */
+export function lyricKaraState(line, lt) {
+  const out = { litChars: 0, prog01: 0, sing: -1, wordLevel: false };
+  if (!line) return out;
+  const chars = line.chars;
+  const n = chars && chars.length ? chars.length : 0;
+  if (line.words && n) {
+    out.wordLevel = true;
+    let lit = 0;
+    for (let i = 0; i < n; i++) {
+      const c = chars[i];
+      if (lt >= c.end) lit = i + 1;
+      else if (lt >= c.t) {
+        lit = i + (lt - c.t) / Math.max(0.05, c.end - c.t);
+        out.sing = i;
+        break;
+      } else break;
+    }
+    out.litChars = lit;
+    out.prog01 = lit / n;
+  } else {
+    const T = line.time, sw = lyricSingWindow(line);
+    out.prog01 = sw > 0 ? Math.min(1, Math.max(0, (lt - T) / sw)) : 1;
+    out.litChars = out.prog01 * Math.max(1, n);
+  }
+  return out;
+}
+
 export class LyricRenderer {
   constructor(container, trackEl, hintEl) {
     this.root = container;
@@ -282,7 +336,17 @@ export class LyricRenderer {
     // yrc 逐字（真人声时间戳）> TTML 逐字 > LRC 行级降级
     const parsed = (text && parseYrc(text))
       || (text && text.includes('<') ? parseTtml(text) : null);
-    this.lines = mergeTranslation(parsed || parseLrc(text), transText);
+    this._mountLines(mergeTranslation(parsed || parseLrc(text), transText));
+  }
+
+  /** 直接挂载成品歌词行（主进程逐字对齐结果）：words 已是真实人声时间戳；
+      words=null 的行保持行级扫光（lyricSingWindow 演唱段估算），不造假均分 */
+  setLyricData(lines, transText) {
+    this._mountLines(mergeTranslation(lines || [], transText || null));
+  }
+
+  _mountLines(lines) {
+    this.lines = lines;
     this.activeIdx = -1;
     this.root.classList.remove('finale'); // 换歌清除收尾淡出态
     this.track.innerHTML = '';
@@ -345,8 +409,9 @@ export class LyricRenderer {
 
   /* 音频时间驱动后处理（幂等）：
      1) 无字级时间戳的行：按整行可用窗口铺满（窗口 = 下一行起点；末行 +8s，收敛 ≤ duration）；
-     2) 有字级时间戳的行：清洗为单调递增、每字最小时长的连续时间轴；字间空洞自动填充
-        （前一字 end 延伸到下一字 t），扫光进度连续不中断、绝不提前终止；
+     2) 有字级时间戳的行：清洗为单调递增、每字最小时长的连续时间轴；
+        【卡拉OK同步硬性约束】字间空洞（换气/停顿）不再填充拉长前一字——扫光必须在
+        空洞期停在字边界，人声停扫光停；仅搭手 <0.1s 的微小测量缝，避免视觉断光闪烁；
      3) 边界保护：所有字/行 end 收敛 ≤ 音频总时长（最后一个字的结束时间必须 ≤ duration）；
         LRC 短于音频时末行扫光完成后保持满亮停留，直到音频播完由 .finale 收尾淡出。 */
   _finalize() {
@@ -379,7 +444,9 @@ export class LyricRenderer {
           prevT = c.t;
         }
         for (let i = 1; i < chars.length; i++) {
-          if (chars[i].t > chars[i - 1].end) chars[i - 1].end = chars[i].t; // 空洞：前一字段拉长到本字起点
+          // 仅搭手 <0.1s 微小测量缝；≥0.1s 的字间空洞（换气/停顿）保留 —— 扫光在空洞期停在字边界
+          const gap = chars[i].t - chars[i - 1].end;
+          if (gap > 0 && gap < 0.1) chars[i - 1].end = chars[i].t;
         }
         // (3) 收敛到音频总时长
         if (dur) {
@@ -490,41 +557,38 @@ export class LyricRenderer {
     if (!line || !el) return;
     const charEls = el._charEls || (el._charEls = el.querySelectorAll('.char'));
     const chars = line.chars;
-    let litN = 0;
+    // 统一走 lyricKaraState：字级严格按真实时间戳（空洞停光）；行级用演唱段窗口（不含等待）
+    const st = lyricKaraState(line, time);
+    let litN;
     if (chars && chars.length) {
-      if (!line.words) {
+      if (!st.wordLevel) {
         el.classList.add('line-kara');
-        const T = line.time, E = Math.max(line.time + 0.3, line.end);
-        litN = E > T ? Math.min(1, Math.max(0, (time - T) / (E - T))) : 1;
+        litN = st.prog01; // 行级：--lit = 整行扫光进度 0~1（.line-kara 的 --cp = --lit）
         for (let i = 0; i < chars.length; i++) {
           const lit = time >= chars[i].t;
           const cls = charEls[i].classList;
           if (lit !== !cls.contains('dim')) cls.toggle('dim', !lit);
         }
-        // 行级数据无法定位「正在唱的字」→ 不做逐字弹跳（清残留）
-        if (el._singIdx != null) { charEls[el._singIdx]?.classList.remove('sing'); el._singIdx = null; }
       } else {
         el.classList.remove('line-kara');
+        litN = st.litChars; // 字级：--lit = 已点亮字符数（浮点），--cp = clamp(lit - ci)
         for (let i = 0; i < chars.length; i++) {
-          const c = chars[i];
-          const lit = time >= c.t;
+          const lit = time >= chars[i].t;
           const cls = charEls[i].classList;
           if (lit !== !cls.contains('dim')) cls.toggle('dim', !lit);
-          if (time >= c.end) litN = i + 1;
-          else if (lit) { litN = i + (time - c.t) / Math.max(0.05, c.end - c.t); break; }
-          else break;
         }
       }
-    }
+    } else litN = 0;
     // --lit：字级 = 已点亮字符数（浮点）；行级 = 整行扫光进度 0~1
     el.style.setProperty('--lit', litN.toFixed(3));
-    // 逐字弹跳：正在唱的字加 .sing（上浮放大），唱完自动移交给下一个字（仅字级数据有意义）
+    // 逐字弹跳：正在唱的字加 .sing（上浮放大）—— sing 索引由 lyricKaraState 给出，
+    // 只在 time 落在某字真实窗口内时有效：字间空洞/等待期不弹跳，绝不提前落到下一字。
     // —— 受「鼓点弹跳」开关门控（this.bounce）：关掉后卡拉OK 不再逐字弹跳
-    const singing = (this.bounce && line.words && litN > 0 && litN < chars.length) ? Math.floor(litN) : -1;
+    const singing = (this.bounce && st.wordLevel) ? st.sing : -1;
     if (singing !== el._singIdx) {
       if (el._singIdx != null) charEls[el._singIdx]?.classList.remove('sing');
-      charEls[singing]?.classList.add('sing');
-      el._singIdx = singing;
+      if (singing >= 0) charEls[singing]?.classList.add('sing');
+      el._singIdx = singing >= 0 ? singing : null;
     }
     // 收尾淡出：LRC 短于音频时末行保持满亮停留，直到音频完全播完才缓慢淡出，绝不提前结束
     const rt = rawTime != null ? rawTime : time;

@@ -27,6 +27,7 @@ mobile/android/local.properties
 # ===== IDE =====
 .idea/
 .vscode/
+.trae/
 *.iml
 
 # ===== 安装包与临时文件 =====
@@ -44,5 +45,7 @@ eo-deploy/
 
 # ===== 官网大文件（APK / exe 走 GitHub Release 与 VPS，不入库） =====
 website/download/
+# website/ 为网站源码工作副本，发布时同步到仓库根（GitHub Pages 根目录），故不入库
+website/
 # 抽帧临时产物，页面未引用
 website/shots/frames/

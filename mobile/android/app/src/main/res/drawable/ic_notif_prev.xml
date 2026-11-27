@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 通知栏「上一首」（深灰源色，见 ic_notif_play 说明） -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FF202124"
+        android:pathData="M6,6h2.2v12L6,18zM19.5,6L19.5,18L10.2,12z" />
+</vector>

@@ -24,6 +24,7 @@ import java.net.URL;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -50,6 +51,10 @@ public class RhythmNetPlugin extends Plugin {
         final String method = call.getString("method", "GET").toUpperCase();
         final boolean follow = call.getBoolean("followRedirects", true);
         final int timeoutMs = call.getInt("timeoutMs", 20000);
+        /* noCookie：干净请求模式——跳过 CookieStore 自动附加与 JS 显式 Cookie 头。
+           网易 weapi 带 historic Cookie（旧 __csrf/失效 MUSIC_U）会被 csrf 校验拒绝（8821），
+           扫码出码/轮询必须无 Cookie 直连 */
+        final boolean noCookie = call.getBoolean("noCookie", false);
         final String bodyText = call.getString("bodyText", null);
         final String bodyB64 = call.getString("bodyBase64", null);
         final JSArray headerArr;
@@ -84,7 +89,7 @@ public class RhythmNetPlugin extends Plugin {
                         conn.setRequestMethod(curMethod);
                         conn.setDoInput(true);
 
-                        String jsCookie = applyHeaders(conn, headerArr, uri);
+                        String jsCookie = applyHeaders(conn, headerArr, uri, noCookie);
 
                         boolean hasBody = body != null && !"GET".equals(curMethod) && !"HEAD".equals(curMethod);
                         if (hasBody) {
@@ -151,8 +156,9 @@ public class RhythmNetPlugin extends Plugin {
         return status == 301 || status == 302 || status == 303 || status == 307 || status == 308;
     }
 
-    /** 写入请求头；返回 JS 显式传入的 Cookie 头（与 store cookie 合并，JS 同名优先） */
-    private String applyHeaders(HttpURLConnection conn, JSArray headerArr, URI uri) {
+    /** 写入请求头；返回 JS 显式传入的 Cookie 头（与 store cookie 合并，JS 同名优先）。
+        noCookie=true 时完全跳过 Cookie 附加（store 与显式头都不发） */
+    private String applyHeaders(HttpURLConnection conn, JSArray headerArr, URI uri, boolean noCookie) {
         Map<String, String> headers = new LinkedHashMap<>();
         String jsCookie = null;
         try {
@@ -170,6 +176,7 @@ public class RhythmNetPlugin extends Plugin {
             if ("cookie".equalsIgnoreCase(e.getKey())) continue; // Cookie 统一合并后设置
             conn.setRequestProperty(e.getKey(), e.getValue());
         }
+        if (noCookie) return null;
 
         Map<String, String> merged = new LinkedHashMap<>();
         try {
@@ -211,13 +218,21 @@ public class RhythmNetPlugin extends Plugin {
 
     private JSArray exportCookies() {
         JSArray carr = new JSArray();
+        Set<String> seen = new java.util.LinkedHashSet<>();
         try {
             for (URI u : cookieStore.getURIs()) {
                 for (HttpCookie c : cookieStore.get(u)) {
+                    /* host-only Cookie（Set-Cookie 无 Domain 属性）getDomain() 返回 null：
+                       必须补上归属 URI 的 host，否则 JS 侧 merge 按空 domain 丢弃——
+                       网易云 MUSIC_U 以 host-only 下发时永远收不进 Jar = 扫码确认后登录失败 */
+                    String d = c.getDomain();
+                    if (d == null || d.isEmpty()) d = u.getHost() == null ? "" : u.getHost();
+                    String key = d + "|" + c.getName();
+                    if (!seen.add(key)) continue; // 同一 Cookie 可能挂在多个 URI 组下，去重
                     JSObject o = new JSObject();
                     o.put("name", c.getName());
                     o.put("value", c.getValue() == null ? "" : c.getValue());
-                    o.put("domain", c.getDomain() == null ? "" : c.getDomain());
+                    o.put("domain", d);
                     o.put("path", c.getPath() == null ? "/" : c.getPath());
                     long maxAge = c.getMaxAge();
                     o.put("persistent", !c.getDiscard() && maxAge >= 0);

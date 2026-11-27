@@ -22,6 +22,22 @@ import fs from 'node:fs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/* ---- 登录链路监控日志：userData/qr-login.log（追加写、同步小流量）----
+   用户扫码时读这个文件即可诊断到底卡在哪一步、Cookie 实际种在哪个域。
+   关键键优先记录（p_skey/skey/uin/qm_keyst 等），避免整包 Cookie 刷屏 */
+function _qrlog(msg) {
+  try {
+    fs.appendFileSync(path.join(app.getPath('userData'), 'qr-login.log'),
+      `[${new Date().toISOString().slice(11, 23)}] ${msg}\n`);
+  } catch { /* noop */ }
+}
+const QR_KEYS = ['uin', 'skey', 'p_skey', 'p_uin', 'pt4token', 'qm_keyst', 'qqmusic_key',
+  'music_key', 'wxuin', 'wxunionid', 'wxopenrfid', 'wxrefresh_token', 'psrf_qqaccess_token', 'psrf_qqrefresh_token'];
+const _cookieDigest = (cookies) => (cookies || [])
+  .filter((c) => QR_KEYS.includes(c.name) && c.value)
+  .map((c) => `${c.name}@${(c.domain || '').replace(/^\./, '')}`)
+  .join(' ') || '(无关键键)';
+
 /* 真实 Chrome UA：Electron 默认 UA 带 "Electron" 字样，平台登录页会拒绝或降级 */
 const UA_CHROME = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
 
@@ -113,9 +129,12 @@ const PLATFORMS = {
     })()`,
     htmlNickRe: /"nick(?:name|Name)?"\s*:\s*"((?:[^"\\]|\\.){1,40})"/,
     htmlUidRe: /"uin"\s*:\s*"?(\d{5,})"?/,
-    hint: '在弹出的官方网页窗口里扫码或账号登录',
-    /* QQ 登录改走「官方网页登录窗口」（方案移植自开源项目 Mineradio）：
-       后台纯扫码页(xui.ptlogin2)只能拿到 QQ 通用登录态，y.qq.com 业务接口
+    hint: '打开手机 QQ 扫一扫登录',
+    /* QQ 登录走「隐藏窗口取码」混合模式：主窗口隐藏加载 y.qq.com 自动点「登录」，
+       OAuth 登录弹窗里抓出二维码推给界面（用户只见二维码，不见网页）；
+       扫码确认、qm_keyst 签发全程在隐藏窗口完成。
+       仅当取码失败/链路卡住时亮出官方网页窗口回退（旧行为）。
+       为什么不直接用纯扫码页(xui.ptlogin2)：那只能拿到 QQ 通用登录态，y.qq.com 业务接口
        （musicu / 我的歌单 / 歌单详情）一律 500003 不认；必须从 y.qq.com 自身
        发起登录，让官方 SPA 的 OAuth 回调在 y.qq.com 域下签发 qm_keyst/qqmusic_key */
     web: true,
@@ -181,13 +200,19 @@ function _send(getWin, channel, payload) {
   try { getWin()?.webContents.send(channel, payload); } catch { /* noop */ }
 }
 
-/** 结束扫码会话：停定时器、销毁后台隐藏窗口、清会话状态（重入/取消/成功/失败均走这里） */
+/** 结束扫码会话：停定时器、销毁后台隐藏窗口与托管弹窗、清会话状态（重入/取消/成功/失败均走这里） */
 function _closeSession(platform) {
   const sess = _sessions.get(platform);
   if (!sess) return;
   _sessions.delete(platform);
   if (sess.qrTimer) clearInterval(sess.qrTimer);
   if (sess.pollTimer) clearInterval(sess.pollTimer);
+  if (sess._fbTimer) clearTimeout(sess._fbTimer);
+  if (sess._shotTimer) clearInterval(sess._shotTimer);
+  if (sess._renewTimer) clearInterval(sess._renewTimer);
+  // OAuth 弹窗与 warmup 辅助窗一并销毁，防取消登录后残留网页窗口
+  if (sess.popups) for (const w of [...sess.popups]) { try { if (!w.isDestroyed()) w.close(); } catch { /* noop */ } }
+  if (sess.oauthWin && !sess.oauthWin.isDestroyed()) { try { sess.oauthWin.destroy(); } catch { /* noop */ } }
   if (sess.win && !sess.win.isDestroyed()) { try { sess.win.destroy(); } catch { /* noop */ } }
 }
 
@@ -532,94 +557,193 @@ function _trustedQqUrl(u) {
   } catch { return false; }
 }
 
-async function _webStart(platform, mgr, getWin) {
+/* ================= QQ 音乐：官网原生链（隐藏窗口 + 自动点登录 + iframe 截图推码） =================
+   演化史（三次实验定稿，别再走回头路）：
+   1. 顶层直载 xlogin(appid=1006102)：被腾讯下线墙「当前应用版本过低」，扫出码=QQ中心 → 弃
+   2. 顶层直载 xlogin(appid=716027609)：码正常、确认页「QQ音乐」✓，但裸 s_url 丢授权上下文，
+      ptlogin 种的 p_skey@graph 无 pt4token → 手动导航 graph authorize 被 302 到
+      show?which=Login 出新码死路（监控日志实测）→ 弃
+   3. 官网原生链（现行）：隐藏窗口加载 y.qq.com 官网 → 自动点「登录」→ 官网自己弹
+      iframe（完整授权上下文）→ 截图 iframe 二维码推 UI。确认后 iframe 内自动走
+      login_jump（带参）→ graph 换 code → wx_redirect 回 y.qq.com → qm_keyst 签发。
+      全链是官网自己验证过的原生流，主进程零二次请求（码不会作废），绝不导航打断。
+   关键基建：paintWhenInitiallyHidden + backgroundThrottling:false（隐藏窗口照常渲染） */
+const QQ_ZOOM = 2;
+
+/** 通用跨 frame 偏移：沿 frame 树 root→target 逐层累计 iframe 元素位置
+    （官网是两层嵌套：y.qq.com → graph show?which=Login → ptlogin xlogin，
+    PoC verify-web4 实测累计 (173.6,154) 正确、截出 277×277 清晰码） */
+async function _frameOffset(mainFrame, targetFrame) {
+  const path = [];
+  const walk = (f) => {
+    if (f === targetFrame) return true;
+    for (const c of (f.frames || [])) {
+      if (walk(c)) { path.unshift(c); return true; }
+    }
+    return false;
+  };
+  if (!walk(mainFrame)) return null;
+  let off = { x: 0, y: 0 };
+  let parent = mainFrame;
+  for (const child of path) {
+    const host = ((child.url || '').split('/')[2]) || '';
+    const io = await parent.executeJavaScript(`(() => {
+      const host = ${JSON.stringify(host)};
+      let hit = null;
+      for (const f of document.querySelectorAll('iframe')) {
+        try { if (new URL(f.src || 'about:blank', location.href).host === host) { const r = f.getBoundingClientRect(); hit = { x: r.x, y: r.y }; break; } } catch { /* bad src */ }
+      }
+      /* host 匹配失败兜底：页面里最大的 iframe（登录框都是大块头） */
+      if (!hit) {
+        let best = null;
+        for (const f of document.querySelectorAll('iframe')) {
+          const r = f.getBoundingClientRect();
+          if (!best || r.width * r.height > best.w * best.h) best = { x: r.x, y: r.y, w: r.width, h: r.height };
+        }
+        if (best && best.w > 200) hit = { x: best.x, y: best.y };
+      }
+      return hit;
+    })()`).catch(() => null);
+    if (!io) return null;
+    off.x += io.x; off.y += io.y;
+    parent = child;
+  }
+  return off;
+}
+
+/** 探测二维码区域（ptlogin iframe 内）：frame 内矩形 + 逐层 iframe 偏移累计
+    → 窗口绝对 CSS 坐标（zoom 渲染下同坐标系） */
+async function _probeQrRect(w) {
+  try {
+    const frames = w.webContents.mainFrame.framesInSubtree || [];
+    const pf = frames.find((f) => /ptlogin2\.qq\.com/.test(f.url || ''));
+    if (!pf) return null;
+    const q = await pf.executeJavaScript(`(() => {
+      const cand = [
+        document.querySelector('.qrImg img'),
+        document.querySelector('img[src*="ptqrshow"]'),
+        document.querySelector('#qrlogin_img')
+      ].filter(Boolean);
+      for (const el of cand) {
+        const r = el.getBoundingClientRect();
+        if (r.width >= 60 && r.height >= 60) {
+          return { x: r.x, y: r.y, w: r.width, h: r.height };
+        }
+      }
+      return null;
+    })()`);
+    if (!q || !q.w) return null;
+    const off = await _frameOffset(w.webContents.mainFrame, pf);
+    if (!off) return null;
+    return {
+      x: Math.round(off.x + q.x), y: Math.round(off.y + q.y),
+      w: Math.round(q.w), h: Math.round(q.h)
+    };
+  } catch { return null; }
+}
+
+async function _apiStart(platform, mgr, getWin) {
   const cfg = PLATFORMS[platform];
   const part = 'persist:qr-login-' + platform;
   const ses = session.fromPartition(part, { cache: true });
   try { ses.setUserAgent(UA_CHROME); } catch { /* noop */ }
-  // 已有完整播放票据：直接复用，不开窗口
+
+  /* 已登录检测：播放票据仍有效 → 直接复用，免扫码 */
   try {
     const cur = await ses.cookies.get({});
     if (_qqLoginState(cur) === 'playback') {
-      await _saveSuccess(platform, cur, {}, mgr, getWin);
+      const profile = await _scrapeProfile(platform, { ses, part }).catch(() => ({}));
+      await _saveSuccess(platform, cur, profile, mgr, getWin);
       return { ok: true, platform, name: cfg.name, reused: true, msg: '登录态仍有效，已直接复用' };
     }
   } catch { /* noop */ }
 
+  /* 陈旧半登录态清理：上次扫出的「通用 QQ 登录态」（非 QQ音乐票据）残留在 partition，
+     会让 Cookie 轮询一启动就误判「已扫码确认」直接跳授权页——新二维码永远推不出来。
+     非播放票据态一律清空，保证每次都从干净状态出新码 */
+  try {
+    if (_qqLoginState(await ses.cookies.get({})) !== 'none') {
+      await ses.clearStorageData({ storages: ['cookies'] });
+      console.log('[qr:qqmusic] 清理上次残留的半登录态 Cookie，重新扫码');
+    }
+  } catch { /* noop */ }
+
   const sess = {
-    win: null, ses, part, done: false, lastQr: '', state: 'web', expiredAt: 0,
-    token: Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
+    win: null, ses, part, done: false, state: 'wait', expiredAt: 0,
+    token: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+    popups: new Set(),
+    phase: 'qr',           // 'qr' 扫码渲染+Cookie轮询 → 'oauth' qm_keyst 签发 → 'done'
+    oauthAt: 0, lastShot: '', qrRect: null, probeCnt: 0
   };
   _sessions.set(platform, sess);
 
-  let settled = false, finalizePending = false, warmupTimer = null, warmupWindow = null;
-  const popupWindows = new Set();
-
+  /* ---- 官网原生链窗口：隐藏但强制渲染 ---- */
   const win = new BrowserWindow({
-    width: 900, height: 720, minWidth: 760, minHeight: 560,
-    show: true, skipTaskbar: false, autoHideMenuBar: true, title: 'QQ音乐登录（官方网页）',
-    webPreferences: { partition: part, contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false }
+    /* 2000×1400 + 导航后 zoom 2：布局视口 1000px（官网保持桌面版布局，登录弹窗
+       居中弹出）；iframe 二维码 87 CSS px → 渲染 174px → 截图物理 ~217px（DPI 1.25）
+       + 弹窗端 pixelated 放大，清晰可扫 */
+    width: 2000, height: 1400, show: false, skipTaskbar: true, autoHideMenuBar: true,
+    paintWhenInitiallyHidden: true,   /* 关键：隐藏窗口照常绘制，capturePage 才有画面 */
+    title: 'QQ音乐扫码',
+    webPreferences: {
+      partition: part, contextIsolation: true, nodeIntegration: false, sandbox: true,
+      backgroundThrottling: false
+    }
   });
+  /* 关键：Windows 上隐藏窗口默认不绘制 → capturePage 全黑。paintWhenInitiallyHidden 让首帧照常画 */
+  try { win.webContents.setBackgroundThrottling(false); } catch { /* noop */ }
+  /* 截图兜底：若 capturePage 持续空窗，退化为「屏幕外可见窗口」模式（仍渲染但不被用户看到）。
+     setOpacity(0)：Windows 多屏/系统把屏幕外坐标拉回可见工作区时依然完全不可见
+     （透明窗口照常渲染，capturePage 截的是页面内容不受影响）——用户曾看到
+     「扫描成功，请在手机上确认」窗口在桌面上残留 */
+  setTimeout(() => {
+    if (!win.isDestroyed() && !sess.done && sess.phase === 'qr' && !sess.lastShot) {
+      try {
+        win.setPosition(-32000, -32000);
+        win.showInactive();
+        win.setOpacity(0);
+        console.log('[qr:qqmusic] 隐藏窗无画面，已切屏幕外透明渲染模式（-32000 + opacity 0，多屏下也绝不可见）');
+      } catch { /* noop */ }
+    }
+  }, 4000);
+
   sess.win = win;
-
-  const cleanupAux = () => {
-    if (warmupTimer) { clearTimeout(warmupTimer); warmupTimer = null; }
-    for (const w of [...popupWindows]) { try { if (!w.isDestroyed()) w.close(); } catch { /* noop */ } }
-    popupWindows.clear();
-    if (warmupWindow && !warmupWindow.isDestroyed()) { try { warmupWindow.close(); } catch { /* noop */ } }
-    warmupWindow = null;
-  };
-
-  const checkCookies = async () => {
-    if (settled || sess.done) return;
-    let state = 'none';
-    try { state = _qqLoginState(await ses.cookies.get({})); } catch { return; }
-    if (state === 'playback') {
-      // QQ 会在短促连发里补齐资料/刷新类 Cookie：稍等一拍做最终读取
-      if (finalizePending) return;
-      finalizePending = true;
-      await sleep(450);
-      let state2 = 'none', cookies = [];
-      try { cookies = await ses.cookies.get({}); state2 = _qqLoginState(cookies); } catch { /* noop */ }
-      if (state2 === 'playback') {
-        settled = true;
-        if (sess.pollTimer) clearInterval(sess.pollTimer);
-        cleanupAux();
-        try { await ses.flushStorageData(); } catch { /* noop */ }
-        console.log(`[qr:${platform}] 检测到播放票据 Cookie（qm_keyst/qqmusic_key），登录完成`);
-        const profile = await _scrapeProfile(platform, sess).catch(() => ({}));
-        try { cookies = await ses.cookies.get({}); } catch { /* noop */ }
-        await _saveSuccess(platform, cookies, profile, mgr, getWin); // 内部负责关窗/清会话
-      } else {
-        finalizePending = false;
-      }
-      return;
+  win.on('closed', () => {
+    if (_sessions.get(platform) === sess && !sess.done) {
+      _closeSession(platform);
+      _send(getWin, 'login-qr-update', { platform, type: 'closed', token: sess.token });
+      console.log(`[qr:${platform}] 登录窗口被关闭，登录未完成`);
     }
-    if (state === 'generic' && !warmupTimer && !warmupWindow) {
-      // 已有通用登录态但官方回调还没签播放票据 → 隐藏 warmup 窗口加载播放器页触发签发
-      warmupTimer = setTimeout(() => {
-        warmupTimer = null;
-        if (settled || sess.done) return;
-        warmupWindow = new BrowserWindow({
-          width: 720, height: 520, show: false, skipTaskbar: true, autoHideMenuBar: true,
-          webPreferences: { partition: part, contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false }
+  });
+
+  /* ---- OAuth 阶段共用：可信域弹窗托管 + 自动点登录/授权 ---- */
+  let settled = false, finalizePending = false, warmupTimer = null, warmupWindow = null;
+  const popupWindows = sess.popups;
+
+  const autoClickAuth = (w) => {
+    if (!w || w.isDestroyed()) return;
+    _exec(w, `
+      setTimeout(() => {
+        const nodes = Array.from(document.querySelectorAll('a, button, span, div'));
+        const node = nodes.find((n) => {
+          const t = (n.textContent || '').trim();
+          if (!/^登录$|立即登录|点击登录|授权/.test(t) || t.length > 6) return false;
+          const r = n.getBoundingClientRect();
+          return r.width > 0 && r.height > 0;
         });
-        warmupWindow.on('closed', () => { warmupWindow = null; });
-        warmupWindow.webContents.on('did-finish-load', checkCookies);
-        warmupWindow.loadURL(QQ_WEB.warmupUrl).catch(() => {});
-      }, 5000);
-    }
+        if (node) node.click();
+      }, 700);
+    `).catch(() => {});
   };
 
-  // 弹窗递归托管：QQ 登录确认会开新窗口（OAuth 回调在子窗口里完成），全部同 partition 放行
-  const installHandlers = (w, isRoot) => {
+  const installHandlers = (w) => {
     if (!w || w.isDestroyed()) return;
     w.webContents.setWindowOpenHandler(({ url }) => {
       if (_trustedQqUrl(url)) {
         return {
           action: 'allow',
           overrideBrowserWindowOptions: {
-            width: 760, height: 640, show: true, autoHideMenuBar: true,
+            width: 420, height: 520, show: false, skipTaskbar: true, autoHideMenuBar: true,
             webPreferences: { partition: part, contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false }
           }
         };
@@ -629,47 +753,216 @@ async function _webStart(platform, mgr, getWin) {
     w.webContents.on('did-create-window', (child) => {
       popupWindows.add(child);
       child.on('closed', () => popupWindows.delete(child));
-      installHandlers(child, false);
+      installHandlers(child);
+      child.webContents.once('did-finish-load', () => autoClickAuth(child));
     });
-    if (!isRoot) w.webContents.on('did-finish-load', checkCookies);
+    w.webContents.on('did-finish-load', () => {
+      try { _qrlog(`[qqmusic] 页面到达: ${w.webContents.getURL().slice(0, 150)}`); } catch { /* noop */ }
+      checkCookies();
+    });
+    /* 扫码确认瞬间窗口自隐：xlogin 页在手机确认后会 302 跳授权链（graph
+       login_jump）——顶层导航一旦离开 ptlogin 即说明用户已确认，二维码使命
+       已完成，窗口立即隐藏（授权链在隐藏窗继续跑，背景不节流）。
+       仅 qr 阶段生效（oauth 阶段主窗还要加载 SPA 换票，不能隐） */
+    w.webContents.on('did-navigate', () => {
+      if (w !== win || sess.phase !== 'qr' || settled || sess.done) return;
+      try {
+        const u = w.webContents.getURL();
+        if (!/ptlogin2\.qq\.com|xui\.ptlogin/.test(u)) {
+          win.hide();
+          _qrlog('[qqmusic] 手机已确认（页面已跳转授权链）→ 窗口立即隐藏');
+        }
+      } catch { /* noop */ }
+    });
   };
-  installHandlers(win, true);
 
-  win.webContents.on('did-finish-load', () => {
-    checkCookies();
-    // 自动点页面「登录」入口（SPA 顶栏），用户无需手动找
-    _exec(win, `
-      setTimeout(() => {
-        const nodes = Array.from(document.querySelectorAll('a, button, span, div'));
-        const loginNode = nodes.find((n) => {
-          const t = (n.textContent || '').trim();
-          if (!/^登录$|登录/.test(t) || t.length > 6) return false;
-          const r = n.getBoundingClientRect();
-          return r.width > 0 && r.height > 0;
-        });
-        if (loginNode) loginNode.click();
-      }, 700);
-    `).catch(() => {});
-  });
-
-  win.on('closed', () => {
-    cleanupAux();
-    if (_sessions.get(platform) === sess && !sess.done) {
-      _closeSession(platform);
-      _send(getWin, 'login-qr-update', { platform, type: 'closed', token: sess.token });
-      console.log(`[qr:${platform}] 登录窗口被用户关闭，登录未完成`);
+  const checkCookies = async () => {
+    if (settled || sess.done) return;
+    let state = 'none', cookies = [];
+    try { cookies = await ses.cookies.get({}); state = _qqLoginState(cookies); } catch { return; }
+    /* 监控：登录态变化必记；oauth 阶段每轮 dump（Cookie 落哪个域一目了然） */
+    if (state !== sess.lastLoggedState) {
+      sess.lastLoggedState = state;
+      _qrlog(`[qqmusic] 状态→${state} | ${_cookieDigest(cookies)}`);
+    } else if (sess.phase === 'oauth') {
+      _qrlog(`[qqmusic] oauth轮询 | ${_cookieDigest(cookies)}`);
     }
-  });
+    if (state === 'playback') {
+      if (finalizePending) return;
+      finalizePending = true;
+      await sleep(450);
+      let state2 = 'none', cookies = [];
+      try { cookies = await ses.cookies.get({}); state2 = _qqLoginState(cookies); } catch { /* noop */ }
+      if (state2 === 'playback') {
+        settled = true;
+        sess.phase = 'done';
+        if (sess.pollTimer) clearInterval(sess.pollTimer);
+        cleanupAux();
+        /* 登录完成：主窗口（含屏幕外兜底窗）一并关闭 —— 成功后不再有任何
+           官方页残留窗口（用户「登录成功后不想看到这个」） */
+        try { if (!win.isDestroyed()) win.close(); } catch { /* noop */ }
+        try { await ses.flushStorageData(); } catch { /* noop */ }
+        _qrlog('[qqmusic] ★ 播放票据已签发，登录完成');
+        console.log('[qr:qqmusic] 播放票据已签发，登录完成');
+        const profile = await _scrapeProfile(platform, sess).catch(() => ({}));
+        try { cookies = await ses.cookies.get({}); } catch { /* noop */ }
+        await _saveSuccess(platform, cookies, profile, mgr, getWin);
+      } else { finalizePending = false; }
+      return;
+    }
+    if (state === 'generic' && sess.phase === 'qr') {
+      /* 手机已确认扫码。官网 iframe 场景：iframe 内 ptlogin 自动 302 login_jump（带
+         完整官网上下文）→ graph 换 code → wx_redirect 回 y.qq.com → qm_keyst 签发。
+         绝不导航打断（上一版顶层直载 5s 导航 authorize，graph 不认裸 s_url 种的态
+         → 302 show?which=Login 出新码 =「确认后没反应」的根因）。30s 无票才兜底 */
+      if (!sess.scanAt) {
+        sess.scanAt = Date.now();
+        _send(getWin, 'login-qr-update', { platform, type: 'scanned', token: sess.token });
+        _qrlog('[qqmusic] 手机已确认 → 等 iframe 官网链自动换票（30s 无票才兜底）');
+        console.log('[qr:qqmusic] 扫码确认，等待官网 iframe 链自动签发 qm_keyst');
+        /* 确认瞬间立即隐藏窗口：截图已不需要，授权链（iframe 302 + JS）在 hidden
+           窗照常执行（backgroundThrottling:false）—— 用户绝不该看到
+           「扫描成功，请稍候」等待页（屏幕外兜底窗口在多屏下可能落入可见区） */
+        try { if (!win.isDestroyed() && win.isVisible()) win.hide(); } catch { /* noop */ }
+        setTimeout(() => {
+          if (!settled && !sess.done && sess.phase === 'qr') startOauth();
+        }, 30000);
+      }
+      return;
+    }
+  };
 
-  sess.pollTimer = setInterval(() => { checkCookies().catch((e) => console.error(`[qr:${platform}] poll 异常:`, e?.message)); }, 1200);
-  win.loadURL(QQ_WEB.loginUrl).catch(async (e) => {
-    console.warn(`[qr:${platform}] profile 入口加载失败，回退首页:`, e?.message);
-    try { await ses.clearCache(); } catch { /* noop */ }
-    win.loadURL(QQ_WEB.fallbackUrl).catch(() => {});
+  const cleanupAux = () => {
+    if (warmupTimer) { clearTimeout(warmupTimer); warmupTimer = null; }
+    for (const w of [...popupWindows]) { try { if (!w.isDestroyed()) w.close(); } catch { /* noop */ } }
+    popupWindows.clear();
+    if (warmupWindow && !warmupWindow.isDestroyed()) { try { warmupWindow.close(); } catch { /* noop */ } }
+    warmupWindow = null;
+  };
+
+  const startOauth = () => {
+    sess.phase = 'oauth';
+    sess.oauthAt = Date.now();
+    _send(getWin, 'login-qr-update', { platform, type: 'scanned', token: sess.token });
+    /* 30s 兜底（正常不应走到：官网 iframe 链自动换票）：warmup 窗加载 player SPA
+       二次触发签发；主窗口也转过去双保险 */
+    win.loadURL(QQ_WEB.warmupUrl).catch(() => {});
+    _qrlog('[qqmusic] startOauth 兜底: 主窗转 player SPA + warmup 窗');
+    setTimeout(() => autoClickAuth(win), 3000);
+    setTimeout(() => { if (!settled && !sess.done && sess.phase === 'oauth') autoClickAuth(win); }, 12000);
+    /* 12s 还没 playback（wx_redirect 换票失败等）：warmup 窗转 player SPA 二次触发签发 */
+    warmupTimer = setTimeout(() => {
+      warmupTimer = null;
+      if (settled || sess.done) return;
+      warmupWindow = new BrowserWindow({
+        width: 720, height: 520, show: false, skipTaskbar: true, autoHideMenuBar: true,
+        webPreferences: { partition: part, contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false }
+      });
+      warmupWindow.on('closed', () => { warmupWindow = null; });
+      warmupWindow.webContents.on('did-finish-load', checkCookies);
+      warmupWindow.loadURL(QQ_WEB.warmupUrl).catch(() => {});
+    }, 12000);
+    /* 20s 超时（兜底 30s + 20s = 确认后 50s 上限）：不能无限死等 */
+    setTimeout(() => {
+      if (settled || sess.done) return;
+      sess.done = true;
+      if (sess.pollTimer) clearInterval(sess.pollTimer);
+      cleanupAux();
+      try { if (!win.isDestroyed()) win.close(); } catch { /* noop */ }
+      _send(getWin, 'login-qr-update', { platform, type: 'expired', token: sess.token });
+      _qrlog('[qqmusic] ✗ 超时：确认后 50s 未取得业务票（见上方 oauth 轮询 Cookie 域分布定位断点）');
+      console.warn('[qr:qqmusic] 登录超时：未取得播放票据');
+    }, 20000);
+  };
+
+  /* ---- 二维码截图推流：探测 → 截屏 → 裁剪 → 推 UI（页面自动换码我们自动跟） ---- */
+  const pushQrShot = async () => {
+    if (sess.done || sess.phase !== 'qr' || win.isDestroyed()) return;
+    /* 1) 探码区（缓存矩形，码位置不变；探测 3 次失败则整页截） */
+    if (!sess.qrRect || sess.probeCnt % 8 === 0) {
+      const r = await _probeQrRect(win);
+      if (r) sess.qrRect = r;
+      sess.probeCnt++;
+    }
+    if (!sess.qrRect) return;   // 页面还没就绪，下轮再试
+    /* 2) 截屏（隐藏窗口依赖 paintWhenInitiallyHidden 保持有画面） */
+    let img;
+    try { img = await win.webContents.capturePage(); }
+    catch { return; }
+    if (!img || img.isEmpty()) return;
+    /* 3) 换算裁剪：截图=物理像素，矩形=CSS像素；zoom 后 1 CSS px = zoom×DPI 物理像素。
+       X/Y 分开算（PoC 实测截图与窗口内容存在轻微非均匀偏差，统一 scale 会裁歪） */
+    const s = img.getSize();
+    const [cw, chh] = (() => { try { return win.getContentSize(); } catch { return [0, 0]; } })();
+    let scaleX = 1, scaleY = 1;
+    try {
+      scaleX = (s.width / Math.max(1, cw)) * QQ_ZOOM;
+      scaleY = (s.height / Math.max(1, chh)) * QQ_ZOOM;
+    } catch { /* noop */ }
+    if (!isFinite(scaleX) || scaleX <= 0 || scaleX > 8) scaleX = 1;
+    if (!isFinite(scaleY) || scaleY <= 0 || scaleY > 8) scaleY = 1;
+    const qr = sess.qrRect;
+    const pad = 12;   /* 静区：二维码四周必须有白边才扫得起（码本体边缘即图案） */
+    const cx = Math.max(0, Math.round((qr.x - pad) * scaleX));
+    const cy = Math.max(0, Math.round((qr.y - pad) * scaleY));
+    const crop = {
+      x: cx, y: cy,
+      width: Math.min(s.width - cx, Math.round((qr.w + pad * 2) * scaleX)),
+      height: Math.min(s.height - cy, Math.round((qr.h + pad * 2) * scaleY))
+    };
+    if (crop.width < 60 || crop.height < 60) return;
+    const out = img.crop(crop).toDataURL();
+    /* 4) 与上次不同才推（页面换码自动同步，同码不重复刷） */
+    if (out !== sess.lastShot) {
+      if (!sess.firstShot) { sess.firstShot = true; _qrlog(`[qqmusic] 首码已推送 (${crop.width}x${crop.height}px)`); }
+      sess.lastShot = out;
+      sess.state = 'wait';
+      _send(getWin, 'login-qr-update', { platform, type: 'refresh', qrSrc: out, token: sess.token });
+    }
+  };
+
+  _qrlog(`[qqmusic] === 会话启动（zoom=${QQ_ZOOM}，截图推码 + Cookie 轮询）===`);
+  installHandlers(win);
+
+  /* ---- 主轮询：截图推码（1.2s）+ Cookie 检测（2.4s 间隔合并在内） ---- */
+  let tick = 0;
+  sess.pollTimer = setInterval(() => {
+    tick++;
+    pushQrShot().catch(() => {});
+    if (tick % 2 === 0) checkCookies().catch((e) => console.error(`[qr:${platform}] poll 异常:`, e?.message));
+  }, 1200);
+
+  /* 官网原生链：加载 y.qq.com → 导航完成 zoom → 自动点「登录」让官网弹 iframe
+     （PoC 验证：隐藏窗口下官网可点、iframe 正常弹出）。多次重试应对 SPA 慢加载 */
+  const _clickLoginBtn = () => {
+    if (win.isDestroyed() || sess.phase !== 'qr') return;
+    _exec(win, `(() => {
+      /* 官网「登录」文字按钮（顶栏），点击后注入登录 iframe */
+      const nodes = Array.from(document.querySelectorAll('a, button, span, div')).filter((n) => {
+        const t = (n.textContent || '').trim();
+        return t === '登录' && n.children.length === 0 && n.getBoundingClientRect().width > 0;
+      });
+      if (nodes.length) { (nodes[nodes.length - 1]).click(); return 'clicked'; }
+      return 'noop';
+    })()`).then((r) => {
+      if (r === 'clicked') _qrlog('[qqmusic] 已点击官网「登录」→ iframe 弹出');
+      else setTimeout(_clickLoginBtn, 2000);   /* SPA 未就绪，2s 后重试 */
+    }).catch(() => setTimeout(_clickLoginBtn, 2500));
+  };
+  win.loadURL(QQ_WEB.loginUrl).then(() => {
+    /* zoom 必须在导航完成后设置（导航会重置 per-origin 缩放） */
+    try { win.webContents.setZoomFactor(QQ_ZOOM); } catch { /* noop */ }
+    setTimeout(_clickLoginBtn, 1800);
+  }).catch(() => {
+    console.warn(`[qr:${platform}] 官网加载失败，重试一次`);
+    win.loadURL(QQ_WEB.loginUrl).then(() => {
+      try { win.webContents.setZoomFactor(QQ_ZOOM); } catch { /* noop */ }
+      setTimeout(_clickLoginBtn, 1800);
+    }).catch(() => {});
   });
-  console.log(`[qr:${platform}] 官方网页登录窗口已打开:`, QQ_WEB.loginUrl);
-  return { ok: true, platform, name: cfg.name, webWindow: true, qrToken: sess.token,
-    hint: '已在单独窗口打开 QQ音乐官方网页，请在窗口内扫码/登录' };
+  console.log(`[qr:${platform}] 官网原生链：隐藏窗口加载官网 → 自动点登录 → iframe 截图推码`);
+  return { ok: true, platform, name: cfg.name, qrToken: sess.token,
+    hint: '正在生成二维码，请稍候' };
 }
 
 /* ================= IPC 注册 =================
@@ -686,7 +979,7 @@ export function registerQrLoginIPC(mgr, getWin) {
     if (!cfg) return { ok: false, msg: `未知平台：${platform}` };
     _closeSession(platform); // 重入自动关闭上一会话，防多实例冲突
     try {
-      return await (cfg.web ? _webStart(platform, mgr, getWin) : _pageStart(platform, mgr, getWin));
+      return await (cfg.web ? _apiStart(platform, mgr, getWin) : _pageStart(platform, mgr, getWin));
     } catch (e) {
       _closeSession(platform);
       return { ok: false, msg: e.message || '启动扫码登录失败' };

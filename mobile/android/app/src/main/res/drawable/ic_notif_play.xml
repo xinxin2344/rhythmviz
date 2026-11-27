@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 通知栏「播放」三角（深灰源色：Android 13 colorized 浅底不自动染色，
+     与网易云一致直接传深灰；12- 由 RemoteViews setColorFilter 再染灰） -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FF202124"
+        android:pathData="M8.5,5.2v13.6L19.5,12z" />
+</vector>

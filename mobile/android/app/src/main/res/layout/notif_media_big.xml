@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 网易云式媒体通知 · 展开视图：信息行 + 进度行 + 大号控制行 -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/notif_root"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+    <ImageView
+        android:id="@+id/notif_bg"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop" />
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingLeft="16dp"
+        android:paddingRight="16dp"
+        android:paddingTop="14dp"
+        android:paddingBottom="12dp">
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+            <ImageView
+                android:id="@+id/notif_cover"
+                android:layout_width="56dp"
+                android:layout_height="56dp" />
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginLeft="14dp"
+                android:layout_marginRight="4dp"
+                android:orientation="vertical">
+                <TextView
+                    android:id="@+id/notif_title"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textColor="#EE000000"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:maxLines="1"
+                    android:ellipsize="end" />
+                <TextView
+                    android:id="@+id/notif_sub"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:textColor="#89000000"
+                    android:textSize="12sp"
+                    android:maxLines="1"
+                    android:ellipsize="end" />
+            </LinearLayout>
+            <TextView
+                android:id="@+id/notif_expand"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⌄"
+                android:textColor="#80000000"
+                android:textSize="15sp" />
+        </LinearLayout>
+        <!-- 进度行：时间 · 细进度条 · 时间 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+            <TextView
+                android:id="@+id/notif_t1"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#89000000"
+                android:textSize="11sp" />
+            <ProgressBar
+                android:id="@+id/notif_progress"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="0dp"
+                android:layout_height="3dp"
+                android:layout_weight="1"
+                android:layout_marginLeft="8dp"
+                android:layout_marginRight="8dp"
+                android:progressTint="#B37C5CFF"
+                android:progressBackgroundTint="#3D000000"
+                android:max="100" />
+            <TextView
+                android:id="@+id/notif_t2"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#89000000"
+                android:textSize="11sp" />
+        </LinearLayout>
+        <!-- 大号控制行 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal"
+            android:gravity="center">
+            <ImageView
+                android:id="@+id/notif_fav"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:layout_marginLeft="30dp"
+                android:layout_marginRight="30dp" />
+            <ImageView
+                android:id="@+id/notif_prev"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:layout_marginLeft="30dp"
+                android:layout_marginRight="30dp" />
+            <ImageView
+                android:id="@+id/notif_play"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:layout_marginLeft="30dp"
+                android:layout_marginRight="30dp" />
+            <ImageView
+                android:id="@+id/notif_next"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:layout_marginLeft="30dp"
+                android:layout_marginRight="30dp" />
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

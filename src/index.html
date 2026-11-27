@@ -6,6 +6,11 @@
         content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https: http:; media-src 'self' blob: https: http:; connect-src 'self' https: http:; font-src 'self' https://fonts.gstatic.com" />
   <title>律动 RhythmViz</title>
   <link rel="stylesheet" href="css/app.css" />
+  <!-- 银河启动页零闪烁：head 同步脚本（在 splash DOM 解析前执行；app.js 是
+       module 延迟执行，解析窗口里 splash 会先按默认星尘样式渲染几百毫秒）。
+       此处渲染前读镜像键，给 <html> 挂 rv-sp-galaxy 预隐藏星尘 DOM，
+       app.js boot 后 WebGL 银河无缝接管 -->
+  <script src="js/splash-boot.js"></script>
 </head>
 <body class="home-active">
   <!-- 可视化舞台 -->
@@ -25,9 +30,13 @@
 
   <!-- 舞台歌词：屏幕侧边竖排堆叠的悬浮歌词列（tilt 层负责倾斜，stack 由 JS 驱动平滑上滚） -->
   <div id="stageLyric">
-    <div id="stageLyricTilt">
-      <div id="stageLyricStack"></div>
-      <div id="stageLyricPh">♪</div>
+    <!-- clip 层：overflow 纵向硬裁窗口外行（Chromium 130 的 mask-clip:no-clip 遮不住 no-repeat 未覆盖区，
+         见 app.css 内注释）；tilt 层负责 3D 倾斜与贴边渐隐 mask -->
+    <div id="stageLyricClip">
+      <div id="stageLyricTilt">
+        <div id="stageLyricStack"></div>
+        <div id="stageLyricPh">♪</div>
+      </div>
     </div>
   </div>
 
@@ -460,7 +469,7 @@
             <span class="pc-copy"><b>✦ 歌词动画 · 文字MV</b><i>24种动画 · 6背景</i></span>
           </button>
         </div>
-        <div class="fx-note" style="margin-top:8px;">切换到歌词动画场景后，在此选 20 种整体风格（配色 + 动效 + 手法全套，点击即时生效），滑块微调画面亮度。</div>
+        <div class="fx-note" style="margin-top:8px;">切换到歌词动画场景后，在此选 23 种整体风格（配色 + 动效 + 手法全套，点击即时生效），滑块微调画面亮度。</div>
         <div class="fx-seg fx-seg-wrap" id="pvStyleSeg">
           <button data-ps="noir">黑白默片</button>
           <button data-ps="crimson">绯红</button>
@@ -504,8 +513,8 @@
         <div class="fx-slider"><span>界面亮度</span><input id="glBright" type="range" min="60" max="130" value="100" /><i id="glBrightV">100</i></div>
         <div class="fx-note">全局字体仅作用于界面文字（歌词字体请在「歌词」页单独设置）；玻璃透明控制面板/悬浮舱背景不透明度，亮度实时调亮调暗，均即时生效并记忆。</div>
         <div class="fx-section-label">MOOD · 氛围</div>
-        <div class="fx-slider"><span>背景模糊</span><input id="fxBgBlur" type="range" min="0" max="160" value="90" /><i id="fxBgBlurV">90</i></div>
-        <div class="fx-slider"><span>背景亮度</span><input id="fxBgBright" type="range" min="10" max="80" value="42" /><i id="fxBgBrightV">42</i></div>
+        <div class="fx-slider mood-bg"><span>背景模糊</span><input id="fxBgBlur" type="range" min="0" max="160" value="90" /><i id="fxBgBlurV">90</i></div>
+        <div class="fx-slider mood-bg"><span>背景亮度</span><input id="fxBgBright" type="range" min="10" max="80" value="42" /><i id="fxBgBrightV">42</i></div>
         <div class="fx-row">
           <button id="tglTheme" class="fx-ghost on" title="封面取色驱动全局配色">🎨 封面取色</button>
         </div>
@@ -657,6 +666,15 @@
           <button id="btnClearCache" class="fx-ghost">🗑 清除音频缓存</button>
         </div>
         <div class="fx-note">清除后台预取的歌单音频缓存（LRU 上限 800MB），不影响歌单与收藏。</div>
+        <div class="fx-section-label">ALIGN · 逐字对齐</div>
+        <div class="fx-row">
+          <button id="btnAlignToggle" class="fx-ghost">开启中</button>
+          <button id="btnAlignModel" class="fx-ghost">⬇ 下载识别模型</button>
+          <button id="btnAlignCacheClear" class="fx-ghost">🗑 清除对齐缓存</button>
+        </div>
+        <div class="fx-note" id="alignStatusNote">检测中…</div>
+        <div class="fx-note" id="alignModelProg" style="display:none;"></div>
+        <div class="fx-note">本地 sherpa-onnx 中文识别引擎，把行级歌词与歌曲人声逐字对齐（真实时间戳）。仅对无逐字时间戳的歌曲生效；模型约 243MB，首次使用需下载，全部离线运行。</div>
         <div class="fx-section-label">CLOSE · 关闭行为</div>
         <div class="fx-row" id="closeActSeg">
           <button class="fx-ghost active" data-ca="ask" title="点击 ✕ 时每次询问">每次询问</button>

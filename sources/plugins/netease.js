@@ -8,6 +8,14 @@
      主程序仅提供通用宿主能力（代理 / 限流 / Cookie 持久化）。
    存放位置：sources/plugins/（应用启动时自动加载，删除文件即移除）
    ============================================================ */
+
+/* 环境无关助手：桌面宿主是 Node（有 webcrypto 全局），移动端是 WebView（只有 crypto），
+   统一走标准 Web API（TextEncoder/btoa 在 Node≥16 与浏览器均可用），不得再用 Buffer */
+const _te = new TextEncoder();
+const _subtle = (typeof webcrypto !== 'undefined' ? webcrypto : crypto).subtle;
+const _b64 = (buf) => { const u = new Uint8Array(buf); let s = ''; for (let i = 0; i < u.length; i++) s += String.fromCharCode(u[i]); return btoa(s); };
+const _hex = (bytes) => [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+
 module.exports = {
   id: 'netease',
   name: '网易云音乐',
@@ -90,11 +98,11 @@ module.exports = {
     RSA_MOD: '00e0b509f6259df8642dbc35662901477df22677ec152b5ff68ace615bb7b725152b3ab17a876aea8a5aa76d2e417629ec4ee341f56135fccf695280104e0312ecbda92557c93870114af6c9d05c4f7f0c3685b7a46bee255932575cce10b424d813cfe4875d3e82047b97ddef52741d546b8e289dc6935b3ece0462db0a22b8e7'
   },
   async _aesCbcB64(text, keyStr) {
-    const key = await webcrypto.subtle.importKey('raw', Buffer.from(keyStr), { name: 'AES-CBC' }, false, ['encrypt']);
-    const out = await webcrypto.subtle.encrypt(
-      { name: 'AES-CBC', iv: Buffer.from(this._weapiConst.IV) }, key, Buffer.from(text, 'utf8')
+    const key = await _subtle.importKey('raw', _te.encode(keyStr), { name: 'AES-CBC' }, false, ['encrypt']);
+    const out = await _subtle.encrypt(
+      { name: 'AES-CBC', iv: _te.encode(this._weapiConst.IV) }, key, _te.encode(text)
     );
-    return Buffer.from(out).toString('base64');
+    return _b64(out);
   },
   _bigModPow(base, exp, mod) {
     let r = 1n;
@@ -112,7 +120,7 @@ module.exports = {
     for (let i = 0; i < 16; i++) sk += C.BASE62[(Math.random() * 62) | 0];
     const p1 = await this._aesCbcB64(JSON.stringify(data), C.PRESET);
     const params = await this._aesCbcB64(p1, sk); // 第二次 AES 输入是首段密文的 base64
-    const x = BigInt('0x' + Buffer.from([...sk].reverse().join(''), 'utf8').toString('hex'));
+    const x = BigInt('0x' + _hex(_te.encode([...sk].reverse().join(''))));
     const encSecKey = this._bigModPow(x, 0x10001n, BigInt('0x' + C.RSA_MOD)).toString(16).padStart(256, '0');
     return { params, encSecKey };
   },

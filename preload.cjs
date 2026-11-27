@@ -60,6 +60,15 @@ contextBridge.exposeInMainWorld('api', {
   sourceUpdateCheck: (id) => ipcRenderer.invoke('source:update:check', id),
   onSourceNotify: (cb) => ipcRenderer.on('source:notify', (_e, m) => cb(m)),
 
+  /* 逐字对齐（sherpa-onnx 本地识别，主进程异步执行） */
+  alignRequest: (spec) => ipcRenderer.invoke('align:request', spec),
+  alignStatus: () => ipcRenderer.invoke('align:status'),
+  alignModelDownload: () => ipcRenderer.invoke('align:model-download'),
+  alignCacheClear: () => ipcRenderer.invoke('align:cache-clear'),
+  onAlignDone: (cb) => ipcRenderer.on('align:done', (_e, d) => cb(d)),
+  onAlignFail: (cb) => ipcRenderer.on('align:fail', (_e, d) => cb(d)),
+  onAlignModelProgress: (cb) => ipcRenderer.on('align:model-progress', (_e, d) => cb(d)),
+
   onAutotest: (cb) => ipcRenderer.on('autotest:start', () => cb()),
   onShot: (cb) => ipcRenderer.on('shot:start', (_e, scene, kw) => cb(scene, kw)),
   onMaximized: (cb) => ipcRenderer.on('win:maximized', (_e, m) => cb(m)),

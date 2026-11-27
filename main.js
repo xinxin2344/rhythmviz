@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import Store from 'electron-store';
 import { parseFile } from 'music-metadata';
 import { SourceManager, registerSourceIPC } from './sources/manager.js';
+import { registerAlignIPC } from './align.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -139,6 +140,7 @@ if (SINGLE_INSTANCE_OK) {
 app.whenReady().then(async () => {
   createWindow();
   registerSourceIPC(sourceMgr);
+  registerAlignIPC({ store, sourceMgr, getWin: () => win });
   sourceMgr.loadPersisted().catch(() => {});
 
   // —— 登录模块：安装时可选（打包态从 resources/login/ 加载，开发态从源码加载）——

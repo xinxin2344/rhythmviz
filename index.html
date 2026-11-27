@@ -24,6 +24,8 @@
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html { scroll-behavior: smooth; }
+  /* 锚点跳转位置修正：fixed 顶栏会盖住目标区块顶部，留出顶栏高度 */
+  section[id] { scroll-margin-top: calc(var(--nav-h) + 10px); }
   body {
     background: var(--bg);
     color: var(--fg);
@@ -926,19 +928,19 @@
 
         <div class="dl-meta">
           <span class="chip">v1.0.0 正式版</span>
-          <span class="chip">约 87 MB</span>
+          <span class="chip">约 113 MB</span>
           <span class="chip">EXE 安装包</span>
         </div>
 
-        <a href="download/RhythmViz-Setup-1.0.0.exe" download class="btn primary dl-main">
+        <a href="https://github.com/xinxin2344/rhythmviz/releases/latest/download/RhythmViz-Setup.exe" class="btn primary dl-main">
           <span>下载 RhythmViz v1.0.0</span>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/></svg>
         </a>
         <div class="dl-note">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5"/></svg>
-          国内 CDN 直链 · 点击即下 · 支持断点续传
+          GitHub 官方直链 · 永久有效 · 点击即下
         </div>
-        <div class="dl-tip">备用线路：<a href="https://github.com/xinxin2344/rhythmviz/releases/download/v1.0.0/RhythmViz-Setup-1.0.0.exe" target="_blank" rel="noopener">GitHub 直链</a> · <a href="https://wwavc.lanzoue.com/iSV5w4c780yb" target="_blank" rel="noopener">蓝奏云（提取码 i86k）</a></div>
+        <div class="dl-tip">备用线路：<a href="https://pan.baidu.com/s/1QhvzzgYEIM_WWGEqsY38ow?pwd=7l17" target="_blank" rel="noopener">百度网盘（密码 7l17）</a> · <a href="https://wwavc.lanzoue.com/b01gie5vre" target="_blank" rel="noopener">蓝奏云（密码 f3tq）</a></div>
       </div>
 
       <div class="dl-card android">
@@ -955,18 +957,18 @@
         </div>
 
         <div class="dl-meta">
-          <span class="chip">v1.1.5 正式版</span>
-          <span class="chip">约 7 MB</span>
+          <span class="chip">v1.1.6 正式版</span>
+          <span class="chip">约 9 MB</span>
           <span class="chip">APK 直装包</span>
         </div>
 
-        <a href="download/RhythmViz-1.1.5.apk" download class="btn primary dl-main">
-          <span>下载 RhythmViz v1.1.5</span>
+        <a href="https://github.com/xinxin2344/rhythmviz/releases/latest/download/RhythmViz.apk" class="btn primary dl-main">
+          <span>下载 RhythmViz v1.1.6</span>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/></svg>
         </a>
         <div class="dl-note">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5"/></svg>
-          香港直链 · 点击即下 · 音源已内置、打开即用
+          GitHub 官方直链 · 永久有效 · 音源已内置、打开即用
         </div>
         <div class="dl-mirror">网易云式竖屏布局 · 通知栏媒体控制（上一首/暂停/下一首 · 锁屏 · 线控） · 返回键逐级返回 · QQ 一键登录；安装时如提示风险，选择「仍要安装 / 继续安装」即可。</div>
       </div>
@@ -974,9 +976,14 @@
       <div class="dl-alt">
         <span class="dl-alt-t">直连速度不理想？试试备用通道</span>
         <div class="dl-alt-row">
-          <a class="dl-alt-link" href="https://wwavc.lanzoue.com/iSV5w4c780yb" target="_blank" rel="noopener">
+          <a class="dl-alt-link" href="https://pan.baidu.com/s/1QhvzzgYEIM_WWGEqsY38ow?pwd=7l17" target="_blank" rel="noopener">
+            <span class="dl-alt-name">百度网盘（双端安装包）</span>
+            <span class="dl-alt-extra">密码 <code>7l17</code></span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7"/><path d="M8.5 7H17v8.5"/></svg>
+          </a>
+          <a class="dl-alt-link" href="https://wwavc.lanzoue.com/b01gie5vre" target="_blank" rel="noopener">
             <span class="dl-alt-name">蓝奏云网盘</span>
-            <span class="dl-alt-extra">提取码 <code>i86k</code></span>
+            <span class="dl-alt-extra">密码 <code>f3tq</code></span>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7"/><path d="M8.5 7H17v8.5"/></svg>
           </a>
         </div>
@@ -1017,7 +1024,7 @@
       </ol>
       <p style="margin: 26px auto 0; max-width: 680px; text-align: center; font-size: 12.5px; line-height: 1.8; color: var(--muted);">
         <span style="color: #58db92; font-weight: 700; letter-spacing: 0.08em;">ANDROID 用户：</span>
-        安卓 v1.1.5 已上线，手机浏览器直接点击上方 APK 按钮下载安装即可（音源已内置、打开即用）；版本更新会在公众号第一时间通知。
+        安卓 v1.1.6 已上线，手机浏览器直接点击上方 APK 按钮下载安装即可（音源已内置、打开即用）；版本更新会在公众号第一时间通知。
       </p>
     </div>
   </section>

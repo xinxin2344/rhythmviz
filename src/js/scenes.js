@@ -1,6 +1,7 @@
 /* ============ 可视化场景：封面粒子 / 频谱反应堆 / 星河 / 唱片 ============ */
 
 import { clamp, lerp } from './audio.js';
+import { lyricKaraState, lyricSingWindow } from './lyrics.js';
 
 const TAU = Math.PI * 2;
 
@@ -36,7 +37,8 @@ class CoverParticles extends Scene {
     this.hasCover = false;
     this._img = null;
     this._pal = null;
-    this._sampleCv = null;         // 封面缩采样布（64×64，setCover 时复用）
+    this._sampleCv = null;         // 封面缩采样布（88×88，setCover 时复用）
+    this._pxSize = 0.033;          // 单粒基准粒径（世界单位）：格距 2.2/88≈0.025 × 1.32 覆盖系数 → 格间无缝
     // 平面粒子基准数据：_base 基准坐标（z 随节奏改写）、_uArr 横向坐标（映射频谱柱）、_phArr 随机相位（鼓点跳动差异）
     this._base = null; this._uArr = null; this._phArr = null;
     this._spec = new Float32Array(96); // 频谱平滑（攻击快衰减慢）
@@ -56,12 +58,13 @@ class CoverParticles extends Scene {
     this._r3Loading = null;
     this._THREE = null;
   }
-  /* 采样封面像素：缩到 64×64 读 RGBA → 采样表（经纬度 + 像素色）；无封面/跨域失败按默认色相随机兜底 */
+  /* 采样封面像素：缩到 88×88 读 RGBA → 采样表（经纬度 + 像素色）；无封面/跨域失败按默认色相随机兜底
+     （88×88=7744 采样格 × 默认 9600 粒子 ≈ 每格 1.24 粒子 → 图像连贯可辨；64 格 + 千级粒子时封面呈稀疏点阵无法辨认） */
   setCover(img, pal) {
     this._img = img;
     this._pal = pal;
     this.hasCover = !!(img && img.width);
-    const N = 64;
+    const N = 88;
     const hue = pal?.hue ?? this.mgr.pal.hue ?? 210;
     const out = [];
     if (this.hasCover) {
@@ -119,9 +122,11 @@ class CoverParticles extends Scene {
     const group = new T.Group();          // 粒子云容器：拖拽/自转/缩放全部作用在 group 上
     scene.add(group);
     const mat = new T.PointsMaterial({
-      size: 0.022, sizeAttenuation: true, vertexColors: true,
-      transparent: true, opacity: 0.9, depthWrite: false,
-      blending: T.AdditiveBlending        // 加色混合 → 粒子交叠处自然发光
+      size: 0.033, sizeAttenuation: true, vertexColors: true,
+      transparent: true, opacity: 0.95, depthWrite: false,
+      // 普通混合（不透明像素块）：忠实还原封面明暗 → 封面可辨；
+      // 原加色混合下封面暗部不发光（整片消失）、亮部重叠过曝发白，是「看不清封面」的根因之一
+      blending: T.NormalBlending
     });
     this._r3 = { renderer, scene, camera, group, mat, points: null };
     this._rebuildPoints();
@@ -133,9 +138,10 @@ class CoverParticles extends Scene {
     if (!T || !r3) return;
     if (r3.points) { r3.group.remove(r3.points); r3.points.geometry.dispose(); r3.points = null; }
     const cfg = this.mgr.coverCfg || {};
-    const count = Math.round(clamp(cfg.count == null ? 1000 : +cfg.count, 300, 99999)); // 上限 99999（Three.js Points 十万级无压力）
+    const count = Math.round(clamp(cfg.count == null ? 9600 : +cfg.count, 300, 99999)); // 上限 99999（Three.js Points 十万级无压力）
     const S = this.samples;
     const PLANE = 2.2;                       // 平面边长（相机 z=2.9 / fov45 可视高 ≈2.40，留边距）
+    const LIFT = 0.05;                       // 暗部抬升（线性空间 5%）：深色封面粒子不没入黑背景，仍保留原明暗层次
     const pos = new Float32Array(count * 3);
     const col = new Float32Array(count * 3);
     const uArr = new Float32Array(count);
@@ -153,7 +159,9 @@ class CoverParticles extends Scene {
       uArr[i] = clamp(u, 0, 0.999);
       vArr[i] = clamp(v, 0, 0.999);
       phArr[i] = Math.random();
-      col[i * 3] = sLin(s.r); col[i * 3 + 1] = sLin(s.g); col[i * 3 + 2] = sLin(s.b);
+      col[i * 3] = sLin(s.r) * (1 - LIFT) + LIFT;
+      col[i * 3 + 1] = sLin(s.g) * (1 - LIFT) + LIFT;
+      col[i * 3 + 2] = sLin(s.b) * (1 - LIFT) + LIFT;
     }
     const geo = new T.BufferGeometry();
     geo.setAttribute('position', new T.BufferAttribute(pos, 3));
@@ -237,7 +245,7 @@ class CoverParticles extends Scene {
       const scale = clamp(cfg.scale == null ? 1 : +cfg.scale, 0.5, 2);
       const spin = cfg.spin !== false;
       const spd = clamp(cfg.spd == null ? 0.3 : +cfg.spd, 0, 1);
-      const wantCount = Math.round(clamp(cfg.count == null ? 1000 : +cfg.count, 300, 99999));
+      const wantCount = Math.round(clamp(cfg.count == null ? 9600 : +cfg.count, 300, 99999));
       if (wantCount !== this._builtCount) this._rebuildPoints(); // 数量设置变化 → 重建 geometry
       // 旋转：拖拽中由指针直控；否则「基准角 ± 小幅摇摆」（封面始终正面可辨，不再整圈自转）+ 惯性阻尼
       if (!this._drag) {
@@ -247,8 +255,8 @@ class CoverParticles extends Scene {
         const damp = Math.pow(0.04, dt);
         this.vTheta *= damp; this.vPhi *= damp;
       }
-      // 摇摆幅度：拖拽中渐隐到 0（防松手瞬间跳变），空闲渐显到 0.34rad（约 ±19°）
-      this._swayAmp += ((this._drag || !spin ? 0 : 0.34) - this._swayAmp) * Math.min(1, dt * 3);
+      // 摇摆幅度：拖拽中渐隐到 0（防松手瞬间跳变），空闲渐显到 0.17rad（约 ±10°，过大封面斜到不可辨）
+      this._swayAmp += ((this._drag || !spin ? 0 : 0.17) - this._swayAmp) * Math.min(1, dt * 3);
       this.theta = this._drag ? this.theta : this._userTheta + Math.sin(this._sway) * this._swayAmp;
       const grp = r3.group;
       grp.rotation.set(this.phi, this.theta, 0);
@@ -279,8 +287,8 @@ class CoverParticles extends Scene {
       // 节拍联动：bass 轻微膨胀 + 鼓点亮度/粒径脉冲
       const pulse = scale * (1 + this._bassSm * 0.08 + this._beat * 0.05);
       grp.scale.set(pulse, pulse, pulse);
-      r3.mat.opacity = Math.min(1, 0.82 + this._bassSm * 0.12 + this._beat * 0.08);
-      r3.mat.size = 0.024 * (1 + this._bassSm * 0.15);
+      r3.mat.opacity = Math.min(1, 0.95 + this._beat * 0.05);
+      r3.mat.size = this._pxSize * (1 + this._bassSm * 0.15);
       r3.renderer.render(r3.scene, r3.camera);
       // WebGL 画布合成回 2D 主画布（render 与 drawImage 同一同步任务，无需 preserveDrawingBuffer）
       ctx.drawImage(r3.renderer.domElement, 0, 0, w, h);
@@ -777,25 +785,10 @@ class ReactorScene extends Scene {
     let tw = ctx.measureText(txt).width;
     const maxW = w * 0.86;
     if (tw > maxW) { ctx.font = `800 ${(fs * maxW / tw).toFixed(1)}px ${fam}`; tw = ctx.measureText(txt).width; }
-    // 卡拉OK进度（音频时间驱动）：字级按已唱字符数（浮点，含末字进行中）；
-    // 行级 LRC（无逐字时间戳）按整行窗口比例推进，严禁均分造假字级时间。
-    // 旧版只按字「起点」计数 → 行级数据全字同起点导致扫光瞬间满格，观感即「高亮提前结束」
-    let prog = 1;
-    if (cur && cur.chars && cur.chars.length) {
-      if (cur.words) {
-        let lit = 0;
-        for (let ci = 0; ci < cur.chars.length; ci++) {
-          const c = cur.chars[ci];
-          if (lt >= c.end) lit = ci + 1;
-          else if (lt >= c.t) { lit = ci + (lt - c.t) / Math.max(0.05, c.end - c.t); break; }
-          else break;
-        }
-        prog = lit / cur.chars.length;
-      } else {
-        const T = cur.time, E = Math.max(cur.time + 0.3, cur.end || cur.time + 0.3);
-        prog = E > T ? clamp((lt - T) / (E - T), 0, 1) : 1;
-      }
-    }
+    // 卡拉OK进度（音频时间驱动）：统一走 lyricKaraState ——
+    // 字级（YRC/TTML 真实人声时间戳）严格按时间戳，字间空洞扫光停住不提前；
+    // 行级 LRC（无逐字时间戳）用演唱段估算窗口（不含行间等待），整行同步推进，严禁均分造假字级时间。
+    const prog = (cur && cur.chars && cur.chars.length) ? lyricKaraState(cur, lt).prog01 : 1;
     ctx.globalAlpha = (hasLines ? 0.88 + this._bassSm * 0.12 : 0.6) * (0.25 + 0.75 * ease);
     // 第一遍：暗底 + 黑投影（可读性）
     ctx.shadowColor = 'rgba(0,0,0,0.85)'; ctx.shadowBlur = 12; ctx.shadowOffsetY = 4;
@@ -1334,6 +1327,174 @@ function buildPvEnabled(J, project, mood) {
   return enabled;
 }
 
+/* ---------- 20 风格「签名手法集」：每风格专属的布局/动效/背景/字效/运镜/转场池 ----------
+   背景：mood 池 + MIN 保底补足会让所有风格共享同一批核心手法（尤其背景全走 looks 包），
+   8 个扩展风格又完全复用基础风格的配色/字体/权重 → 观感趋同。
+   做法：利用 planner 原生 project.overrides[li] 每行覆盖（合法绕过 mood/randomOk 门控），
+   按「文本 hash」确定性注入签名组合——同一行歌词永远同一套手法（副歌重复保持统一感），
+   不同行在签名池内轮换；少数行（1-rate）留给 mood 池制造意外。
+   字段：lay 布局池 / hero 重音行(!)布局 / ent 进场 / exi 离场 / hld hold / bg 背景池 /
+        tr 字效池（treatRate% 行生效，其余 none）/ cam 运镜 / dec 装饰 / tra 转场 /
+        colors 专属配色（写 project.colors，打破扩展风格与基底配色雷同）/
+        fonts 字体角色覆盖（单键字符串，见 J.resolveStyle）/ rate 覆盖行占比。 */
+const PV_LAY_FITS = { // 布局适配字数 [min,max]（overrides 不做 fits 检查，注入前自行过滤防溢出）
+  center: [1, 99], mixed: [2, 16], vcols: [1, 18], marquee: [1, 12], tile: [1, 12], scatter: [2, 14],
+  ring: [2, 16], wave: [2, 16], huge: [1, 8], labels: [1, 16], condensed: [1, 10], gloss: [1, 12],
+  type: [1, 28], diag: [1, 14], circle: [1, 10], stack: [1, 12], pill: [1, 14],
+  bounceLine: [2, 16], bubbles: [1, 12], credits: [1, 16], crossBands: [1, 14], depthStack: [1, 14],
+  elastic: [2, 12], flipBoard: [1, 12], halfVertical: [1, 14], hanging: [3, 16], keycaps: [1, 10],
+  neon: [1, 14], orbit: [1, 14], rain: [1, 16], slotMachine: [1, 10], splitHalves: [1, 14],
+  stickerBomb: [1, 12], tunnel: [1, 14], typeSpecimen: [2, 22], wordCloud: [1, 14], zoomRepeat: [1, 12],
+  dotMatrix: [1, 20], kanjiFocus: [3, 20], genkou: [1, 22],
+};
+const PV_LOOKS = {
+  /* 黑白默片：打字机竖排/片尾字幕，无背景或噪声/信箱，极简字效，平移运镜 */
+  noir:      { rate: 0.92, treatRate: 45,
+    lay: ['type', 'credits', 'vcols', 'condensed'], hero: ['huge'], bg: ['none', 'noiseField', 'letterbox', 'bigChar'],
+    tr: ['none', 'kerningWide', 'fadeChars'], ent: ['type', 'wipe', 'blur', 'cut'], exi: ['cut', 'blur', 'drift', 'wipe'],
+    hld: ['still', 'breathe'], cam: ['push', 'floatNoise', 'panR'], dec: ['leaders', 'counter'], tra: ['wipe', 'cover'] },
+  /* 绯红：情绪巨字/半割，放射·同心圆背景，卡拉OK扫色+色版错位，节拍 Punch */
+  crimson:   { rate: 0.78, treatRate: 65,
+    lay: ['huge', 'stack', 'mixed', 'halfVertical'], hero: ['zoomRepeat', 'huge'], bg: ['splitV', 'sunburst', 'concentric', 'noiseField'],
+    tr: ['karaoke', 'glitchSplit', 'outline'], ent: ['zoom', 'slice', 'scramble', 'knWordSlam'], exi: ['glitch', 'slice', 'explode'],
+    hld: ['glitchtick', 'wave', 'still'], cam: ['beatPunch', 'dollyIn', 'push'], dec: ['slash', 'rings', 'barcode'], tra: ['flashCross', 'sliceShift'] },
+  /* 警示黄：对角/标签/跑马灯，条纹·仪表背景，模板字/框线，甩镜 */
+  caution:   { rate: 0.82, treatRate: 70,
+    lay: ['diag', 'labels', 'ticker', 'tile'], hero: ['huge', 'halfVertical'], bg: ['bigStripes', 'tvBars', 'checker', 'scanBars'],
+    tr: ['stencilGap', 'outlineFill', 'boxed', 'halftone'], ent: ['pop', 'spin', 'slice', 'zoom'], exi: ['scatter', 'shrink', 'glitch'],
+    hld: ['jitter', 'knTickShift', 'still'], cam: ['snapPan', 'whipIn', 'beatPunch'], dec: ['arrows', 'counter', 'stripes', 'barcode'], tra: ['blinds', 'checker', 'blockDissolve'] },
+  /* 品红：波浪/胶囊/气泡/贴纸，波点·棋盘背景，贴纸描边+彩虹，弹跳运镜 */
+  magenta:   { rate: 0.72, treatRate: 65,
+    lay: ['wave', 'pill', 'gloss', 'bubbles', 'stickerBomb'], hero: ['kanjiFocus', 'huge'], bg: ['polka', 'checker', 'splitDiag', 'bokehBg'],
+    tr: ['sticker', 'rainbow', 'gradientSweep', 'sizeWave'], ent: ['pop', 'drop', 'spin', 'stretch'], exi: ['scatter', 'shrink', 'stretch'],
+    hld: ['wave', 'breathe', 'jitter'], cam: ['bounce', 'beatPunch', 'panL'], dec: ['sparks', 'shapes', 'dots'], tra: ['spinOut', 'doorsOpen', 'cubeTurn'] },
+  /* 纸张：版面/竖排/原稿纸，撕纸·剪纸·青海波背景，稿纸格+着重号，和风装饰 */
+  paper:     { rate: 0.88, treatRate: 55,
+    lay: ['typeSpecimen', 'stack', 'vcols', 'genkou'], hero: ['kanjiFocus'], bg: ['tornPaper', 'paperCut', 'seigaiha', 'noiseField'],
+    tr: ['none', 'monoGrid', 'underline', 'emphasisDots'], ent: ['type', 'wipe', 'brushReveal', 'blur'], exi: ['drift', 'wipe', 'blur'],
+    hld: ['breathe', 'still', 'drift'], cam: ['push', 'floatNoise', 'pendulumSway'], dec: ['seal', 'petals', 'brushStroke'], tra: ['inkBlob', 'wipe'] },
+  /* HUD：圆环/键盘/点阵，扫描线·频谱·VHS 背景，框线+半调，手持噪声运镜 */
+  hud:       { rate: 0.85, treatRate: 60,
+    lay: ['circle', 'ring', 'keycaps', 'dotMatrix', 'ticker'], hero: ['huge', 'dotMatrix'], bg: ['scanBars', 'eqBars', 'vhsBand', 'retroGrid', 'dotGrid'],
+    tr: ['boxed', 'inline', 'monoGrid', 'halftone'], ent: ['type', 'scramble', 'assemble', 'flicker'], exi: ['glitch', 'slice', 'blur'],
+    hld: ['glitchtick', 'knTickShift', 'jitter'], cam: ['handheld', 'floatNoise', 'push'], dec: ['waveform', 'grid', 'barcode', 'rings'], tra: ['pixelate', 'checker', 'blinds'] },
+  /* 薄荷：标签贴纸/跑马灯/电传带，点阵·扫描背景，荧光笔+卡拉OK */
+  mint:      { rate: 0.82, treatRate: 60,
+    lay: ['labels', 'marquee', 'type', 'tape'], hero: ['huge', 'labels'], bg: ['dotGrid', 'scanBars', 'noiseField', 'meshBlobs'],
+    tr: ['marker', 'underline', 'karaoke', 'boxed'], ent: ['scramble', 'type', 'flicker', 'wipe'], exi: ['glitch', 'slice', 'drift'],
+    hld: ['still', 'glitchtick'], cam: ['push', 'floatNoise'], dec: ['barcode', 'grid', 'leaders'], tra: ['blockDissolve', 'pixelate'] },
+  /* 标本：字典版面/光泽/引注，信箱+边框背景，下划线+圈字，极静 */
+  specimen:  { rate: 0.92, treatRate: 50,
+    lay: ['typeSpecimen', 'gloss', 'credits', 'vcols'], hero: ['kanjiFocus'], bg: ['none', 'letterbox', 'noiseField', 'borderFrame'],
+    tr: ['none', 'underline', 'kerningWide', 'circled', 'emphasisDots'], ent: ['type', 'blur', 'wipe'], exi: ['blur', 'drift', 'wipe'],
+    hld: ['still', 'breathe'], cam: ['push', 'panR', 'floatNoise'], dec: ['leaders', 'slash', 'brackets'], tra: ['cover', 'uncover', 'wipe'] },
+  /* 换乘指示：对角/标签/分割带，条纹·放射·雪佛龙背景，箭头计数器装饰，平移甩镜 */
+  transit:   { rate: 0.8, treatRate: 65,
+    lay: ['diag', 'labels', 'ticker', 'splitHalves'], hero: ['huge'], bg: ['bigStripes', 'sunburst', 'chevron', 'splitH'],
+    tr: ['boxed', 'outlineFill', 'stencilGap', 'halftone'], ent: ['wipe', 'slice', 'pop', 'stretch'], exi: ['wipe', 'slice', 'scatter'],
+    hld: ['still', 'jitter', 'knCounterRock'], cam: ['panL', 'panR', 'snapPan', 'push'], dec: ['arrows', 'shapes', 'counter', 'stripes'], tra: ['pushSlide', 'whipPan', 'blinds'] },
+  /* 蓝图：制图对角/版面，点阵·方格·等高线背景，细线描边，推镜斜移 */
+  blueprint: { rate: 0.85, treatRate: 55,
+    lay: ['diag', 'typeSpecimen', 'center', 'credits'], hero: ['huge'], bg: ['dotGrid', 'retroGrid', 'topoLines', 'isoCubes', 'hexGrid'],
+    tr: ['none', 'outline', 'dotted', 'underline'], ent: ['wipe', 'slice', 'type', 'assemble'], exi: ['wipe', 'slice', 'shrink'],
+    hld: ['still', 'drift'], cam: ['push', 'tiltUp', 'driftDiag'], dec: ['grid', 'shapes', 'leaders', 'counter'], tra: ['diagonalWipe', 'pushSlide', 'clockWipe'] },
+  /* 胭脂：巨字/胶囊/霓虹管，渐变·聚光·光斑背景，渐变字+卡拉OK，缓推运镜 */
+  rouge:     { rate: 0.75, treatRate: 65,
+    lay: ['huge', 'pill', 'mixed', 'neon'], hero: ['zoomRepeat', 'huge'], bg: ['gradientSweep', 'spotlight', 'meshBlobs', 'vignettePulse'],
+    tr: ['gradientV', 'karaoke', 'softShadow', 'fadeChars'], ent: ['blur', 'zoom', 'wipe', 'pop'], exi: ['blur', 'shrink', 'drift'],
+    hld: ['breathe', 'wave', 'still'], cam: ['dollyIn', 'push', 'orbitDrift'], dec: ['blobs', 'leaders', 'rings'], tra: ['irisOpen', 'cover', 'wipe'] },
+  /* 单色：圆环/纵排/胶囊，棋盘·波纹背景，双重描边+色版错位，滚屏/眩晕 */
+  mono:      { rate: 0.75, treatRate: 60,
+    lay: ['circle', 'ring', 'vcols', 'pill', 'tile'], hero: ['huge', 'halfVertical'], bg: ['checker', 'moire', 'concentric', 'noiseField'],
+    tr: ['echoOutline', 'doubleOutline', 'glitchSplit', 'none'], ent: ['assemble', 'zoom', 'slice', 'flicker'], exi: ['explode', 'glitch', 'blur'],
+    hld: ['still', 'wave', 'glitchtick'], cam: ['roll', 'vertigo', 'push'], dec: ['rings', 'dots', 'barcode'], tra: ['checker', 'blockDissolve', 'flashCross'] },
+  /* ===== 扩展 8 种：专属配色+字体打破与基底的配对相似 ===== */
+  /* 极光：夜空青底·冰白字·极光绿——霓虹管/周回/波浪，极光带·星野背景，辉光字，环绕运镜 */
+  aurora:    { rate: 0.85, treatRate: 60,
+    colors: { bg: '#07131F', fg: '#DFF7FF', sub: '#6FA8B8', accent: '#57FFC8', ghostA: '#4FD8FF', ghostB: '#9D7BFF' },
+    fonts: { display: 'mincho_light', serif: 'mincho_light', body: 'gothic_med' },
+    lay: ['neon', 'orbit', 'wave', 'stack'], hero: ['neon', 'huge'], bg: ['auroraRibbons', 'meshBlobs', 'gradientSweep', 'starfield'],
+    tr: ['glow', 'fadeChars', 'gradientSweep', 'karaoke'], ent: ['blur', 'wipe', 'assemble', 'stretch'], exi: ['blur', 'drift', 'wipe'],
+    hld: ['breathe', 'drift', 'wave'], cam: ['orbitDrift', 'floatNoise', 'push'], dec: ['rings', 'blobs', 'waveform'], tra: ['irisOpen', 'cover', 'wipe'] },
+  /* 赛博：深蓝黑底·青字·洋红差色——点阵/键盘/纵割，方格隧道·VHS 背景，霓虹管+镀铬，眩晕抖镜 */
+  cyber:     { rate: 0.85, treatRate: 70,
+    colors: { bg: '#05060E', fg: '#E8F6FF', sub: '#5E7E9E', accent: '#00E5FF', ghostA: '#FF3DF0', ghostB: '#7CFF6B' },
+    lay: ['dotMatrix', 'keycaps', 'ticker', 'halfVertical', 'depthStack'], hero: ['zoomRepeat', 'dotMatrix'], bg: ['retroGrid', 'scanBars', 'vhsBand', 'squareTunnel', 'eqBars'],
+    tr: ['neonOutline', 'glitchSplit', 'chrome', 'inline'], ent: ['scramble', 'slice', 'flicker', 'knWordSlam'], exi: ['glitch', 'slice', 'explode'],
+    hld: ['glitchtick', 'knTickShift', 'still'], cam: ['vertigo', 'shakeHard', 'handheld'], dec: ['grid', 'waveform', 'barcode', 'brackets'], tra: ['pixelate', 'blockDissolve', 'shatterTiles'] },
+  /* 落日：黄昏紫底·暖橙——巨字/片尾字幕，落日·云层·山脊背景，长影字，缓推下摇 */
+  sunset:    { rate: 0.8, treatRate: 60,
+    colors: { bg: '#1D0E14', fg: '#FFE8D6', sub: '#B97F6E', accent: '#FF8A3D', ghostA: '#FFB27A', ghostB: '#C84F6E' },
+    fonts: { serif: 'mincho_light' },
+    lay: ['huge', 'pill', 'credits', 'mixed'], hero: ['huge', 'zoomRepeat'], bg: ['sunsetSun', 'horizonGlow', 'cloudLayers', 'mountains', 'godRays'],
+    tr: ['karaoke', 'gradientV', 'longShadow', 'fadeChars'], ent: ['blur', 'wipe', 'zoom', 'stretch'], exi: ['blur', 'drift', 'shrink'],
+    hld: ['breathe', 'wave'], cam: ['dollyIn', 'tiltDown', 'push'], dec: ['blobs', 'bars', 'leaders'], tra: ['irisOpen', 'wipe', 'cover'] },
+  /* 水墨：宣纸白底·墨字·朱印——竖排/原稿纸，大理石·撕纸背景，毛笔入场+盖印离场 */
+  ink:       { rate: 0.92, treatRate: 40,
+    colors: { bg: '#F2F0EA', fg: '#22262B', sub: '#6E7278', accent: '#B03A2E', ghostA: '#8E9298', ghostB: '#5A636E' },
+    fonts: { display: 'shippori', serif: 'shippori', body: 'mincho' },
+    lay: ['vcols', 'stack', 'genkou', 'typeSpecimen'], hero: ['kanjiFocus', 'huge'], bg: ['tornPaper', 'marble', 'noiseField', 'paperCut'],
+    tr: ['none', 'kerningWide', 'fadeChars', 'baselineShift'], ent: ['brushReveal', 'type', 'blur', 'wipe'], exi: ['drift', 'blur', 'fanClose'],
+    hld: ['still', 'breathe'], cam: ['push', 'floatNoise'], dec: ['seal', 'brushStroke', 'kamon', 'kasumi'], tra: ['inkBlob', 'wipe'] },
+  /* 霓虹：夜黑底·荧光粉·电光青——霓虹管/词云/贴纸，霓虹街·散景背景，霓虹描边，速zoom运镜 */
+  neon:      { rate: 0.72, treatRate: 65,
+    colors: { bg: '#0B0B12', fg: '#FF3DF0', sub: '#8E5EC8', accent: '#2EF2FF', ghostA: '#FF7AE0', ghostB: '#2EF2FF' },
+    fonts: { display: 'pop', body: 'round' },
+    lay: ['neon', 'wordCloud', 'stickerBomb', 'bubbles', 'flipBoard'], hero: ['neon', 'huge'], bg: ['retroGrid', 'bokehBg', 'kaleidoscope', 'particlesBg', 'polka'],
+    tr: ['neonOutline', 'glow', 'rainbow', 'gradientSweep'], ent: ['pop', 'drop', 'spin', 'flicker'], exi: ['scatter', 'glitch', 'shrink'],
+    hld: ['wave', 'jitter', 'breathe'], cam: ['beatPunch', 'crashZoom', 'bounce'], dec: ['sparks', 'shapes', 'dots', 'rings'], tra: ['doorsOpen', 'cubeTurn', 'spinOut'] },
+  /* 复古：旧纸米黄·深褐·褪红——版面/光泽，胶片·暗角背景，半调网点，老式平移 */
+  vintage:   { rate: 0.88, treatRate: 55,
+    colors: { bg: '#E8DCC3', fg: '#3B2F22', sub: '#7A6A52', accent: '#A5493A', ghostA: '#8A7458', ghostB: '#5E6E5A' },
+    lay: ['credits', 'typeSpecimen', 'gloss', 'vcols'], hero: ['kanjiFocus'], bg: ['filmStrip', 'vignettePulse', 'noiseField', 'tornPaper', 'letterbox'],
+    tr: ['none', 'halftone', 'fauxBold', 'kerningWide'], ent: ['type', 'wipe', 'blur', 'flicker'], exi: ['blur', 'drift', 'wipe'],
+    hld: ['still', 'breathe', 'drift'], cam: ['push', 'panL', 'floatNoise'], dec: ['leaders', 'barcode', 'brackets'], tra: ['wipe', 'cover', 'uncover'] },
+  /* 矩阵：纯黑绿底——文字雨/纵割/隧道，噪声·速度线背景，色版错位，强抖运镜 */
+  matrix:    { rate: 0.85, treatRate: 45,
+    colors: { bg: '#020803', fg: '#5BFF7A', sub: '#2E9E4C', accent: '#B6FFCB', ghostA: '#37D96B', ghostB: '#1E7A3C' },
+    lay: ['rain', 'halfVertical', 'dotMatrix', 'tunnel', 'vcols'], hero: ['zoomRepeat', 'rain'], bg: ['noiseField', 'scanBars', 'dotGrid', 'moire', 'speedLines'],
+    tr: ['glitchSplit', 'none', 'echoOutline'], ent: ['scramble', 'slice', 'flicker', 'type'], exi: ['glitch', 'slice', 'explode'],
+    hld: ['glitchtick', 'wave', 'still'], cam: ['shakeHard', 'roll', 'push'], dec: ['barcode', 'grid', 'dots'], tra: ['pixelate', 'shatterTiles', 'blockDissolve'] },
+  /* 梦境：深靛底·薰衣草·樱粉——片尾字幕/堆叠，散景·星云背景，柔影辉光，漂浮运镜 */
+  dream:     { rate: 0.85, treatRate: 60,
+    colors: { bg: '#151226', fg: '#E8DFF5', sub: '#8F84B8', accent: '#F0A8D0', ghostA: '#9D8FD8', ghostB: '#6EC8D8' },
+    fonts: { display: 'mincho_light', serif: 'mincho_light', body: 'mincho' },
+    lay: ['credits', 'stack', 'mixed', 'neon'], hero: ['huge', 'kanjiFocus'], bg: ['bokehBg', 'cloudLayers', 'meshBlobs', 'starfield', 'gradientSweep'],
+    tr: ['softShadow', 'glow', 'fadeChars', 'karaoke'], ent: ['blur', 'assemble', 'wipe', 'stretch'], exi: ['blur', 'drift', 'shrink'],
+    hld: ['breathe', 'drift', 'wave'], cam: ['floatNoise', 'orbitDrift', 'dollyIn'], dec: ['blobs', 'rings', 'dots'], tra: ['irisOpen', 'cover', 'wipe'] },
+};
+
+/* 由签名集生成每行 overrides：hash(风格盐+文本) 确定性抽取（同一行歌词永远同一套手法，
+   副歌重复自动统一）；重音行(结尾!)走 hero 布局；超出布局字数适配的键自动过滤。 */
+function buildPvOverrides(J, lines, styleKey, bundle) {
+  const look = PV_LOOKS[styleKey];
+  if (!look || !Array.isArray(look.lay)) return null;
+  const salt = (bundle && bundle.salt || styleKey) + '|' + styleKey;
+  const ovs = {};
+  for (let li = 0; li < lines.length; li++) {
+    const txt = String(lines[li] && lines[li].text || '').trim();
+    if (!txt) continue;                                  // 空行（间奏）交给引擎
+    const h = J.sid(salt + '|' + txt.replace(/\s+/g, '')); // 文本哈希 → 重复行同一套手法
+    if ((J.h(h, 99, 13) % 100) / 100 > (look.rate != null ? look.rate : 0.8)) continue; // 少量行留给 mood 池
+    const pick = (arr, j) => arr[J.h(h, j, 13) % arr.length];
+    const n = [...txt.replace(/\s/g, '')].length;
+    const hero = /[!！]$/.test(txt) || !!lines[li].impact;
+    const src = hero && look.hero ? look.hero : look.lay;
+    const pool = src.filter(k => { const f = PV_LAY_FITS[k]; return !f || (n >= f[0] && n <= f[1]); });
+    const d1 = J.h(h, 10, 13) % 100;
+    ovs[li] = {
+      layout: pool.length ? pool[J.h(h, 1, 13) % pool.length] : (hero ? 'huge' : 'center'),
+      enter: pick(look.ent, 2), exit: pick(look.exi, 3), hold: pick(look.hld, 4),
+      bg: pick(look.bg, 5),
+      treat: d1 < (look.treatRate != null ? look.treatRate : 55) ? pick(look.tr, 6) : 'none',
+      cam: pick(look.cam, 7),
+      decor: d1 % 3 === 2 ? [pick(look.dec, 8), pick(look.dec, 12)] : [pick(look.dec, 8)],
+      trans: pick(look.tra, 9),
+    };
+  }
+  return Object.keys(ovs).length ? ovs : null;
+}
+
 /* ---------- 性能：离屏降分辨率 + 限帧 ----------
    JIZURA 设计分辨率 16:9 = 1920×1080；离屏按 720p 出图（plan.H → PV_OFF_H，像素量 ≈ 44%），
    renderer.frame 传 scale 让引擎按比例出图，主画布 contain 缩放绘制，观感损失很小。 */
@@ -1422,6 +1583,8 @@ class PvScene extends Scene {
       try {
         const lrc = this._synthLrc(lines);
         if (!lrc) { this._plan = null; this._renderer = null; return; }
+        // overrides 用的行列表必须与 _synthLrc 的过滤一致（li = LRC 行号）
+        const fl = lines.filter(ln => ln && String(ln && ln.text || '').trim() && ln.time != null && isFinite(ln.time));
         const project = J.defaultProject();
         /* 整体风格 bundle：style 之外再叠 mood（约束手法池）/ fx 参数 / 部件集开关 / typeset·unify / 独立 seed 盐 */
         const bundle = PV_PRESETS[styleKey] || PV_PRESETS.noir;
@@ -1438,8 +1601,13 @@ class PvScene extends Scene {
         if (bundle.unify != null) project.unify = bundle.unify;
         if (bundle.sets) Object.assign(project, bundle.sets);
         project.fx = Object.assign({}, project.fx, bundle.fx); // fx 扁平键值：默认值打底 → bundle 覆盖，不丢默认项
+        const look = PV_LOOKS[styleKey];                      // 签名手法集：专属配色/字体打破扩展风格与基底雷同
+        if (look && look.colors) project.colors = Object.assign({ enabled: true, accentOn: true }, look.colors);
+        if (look && look.fonts) project.fonts = look.fonts;
         const en = buildPvEnabled(J, project, bundle.mood);    // 必须在 sets 应用之后构建（randomOk 依赖 extra/wa 开关）
         if (en) project.enabled = en;
+        const ovs = buildPvOverrides(J, fl, styleKey, bundle); // 每行签名手法注入（overrides 原生绕过 mood 门控）
+        if (ovs) project.overrides = ovs;
         const plan = J.plan(project, null);
         if (seq !== this._buildSeq) return;
         this._plan = plan;

@@ -1,6 +1,6 @@
 /* ============ UI 交互：标题栏 / 首页 / 视觉控制台 / 底栏 / 抽屉 ============ */
 import { fmtTime, clamp, makeTrack } from './audio.js';
-import { LYRIC_PRESETS } from './lyrics.js';
+import { LYRIC_PRESETS, lyricKaraState } from './lyrics.js';
 import { ThemeEngine } from './theme.js';
 import { FoliaSphere } from './folia-sphere.js';
 
@@ -452,6 +452,7 @@ export function setupUI(app) {
   });
   els.progressBar.addEventListener('pointermove', (e) => { if (dragging) seekTo(e); });
   els.progressBar.addEventListener('pointerup', () => { dragging = false; els.progressBar.classList.remove('dragging'); });
+  els.progressBar.addEventListener('pointercancel', () => { dragging = false; els.progressBar.classList.remove('dragging'); });
 
   /* --- 场景切换（视觉控制台预设卡） --- */
   /* --- 场景专属设置容器（预设页 #fxSceneCfg）：点击场景卡只显示对应 data-cfg-scene 分区，默认全隐藏；
@@ -1253,7 +1254,7 @@ export function setupUI(app) {
   const pcvCountToSlider = (n) => Math.round((Math.log(clamp(n, PCV_CNT_MIN, PCV_CNT_MAX) / PCV_CNT_MIN) / PCV_LNK) * 100);
   const applyPcvCfg = () => {
     const scale = clamp(numOr(app.settings.pcvScale, 100) / 100, 0.5, 2);
-    const count = Math.round(clamp(numOr(app.settings.pcvCount, 1000), PCV_CNT_MIN, PCV_CNT_MAX)); // 上限 99999
+    const count = Math.round(clamp(numOr(app.settings.pcvCount, 9600), PCV_CNT_MIN, PCV_CNT_MAX)); // 上限 99999
     const spin = app.settings.pcvSpin !== false;
     const spd = clamp(numOr(app.settings.pcvSpd, 30), 0, 100) / 100;
     scenes.setCoverConfig?.({ scale, count, spin, spd });
@@ -1592,6 +1593,50 @@ export function setupUI(app) {
   }));
   applyCloseAct(app.settings.closeAction || 'ask');
 
+  /* --- 高级分区：逐字对齐（sherpa-onnx 本地识别模型管理 + 开关 + 缓存清理） --- */
+  const alignNote = $('#alignStatusNote'), alignProg = $('#alignModelProg'), alignToggle = $('#btnAlignToggle');
+  const refreshAlign = async () => {
+    const st = await window.api.alignStatus?.().catch(() => null);
+    if (!st) { if (alignNote) alignNote.textContent = '引擎不可用'; return; }
+    if (alignToggle) {
+      alignToggle.textContent = st.enabled ? '开启中' : '已关闭';
+      alignToggle.classList.toggle('active', st.enabled);
+    }
+    if (alignNote) {
+      alignNote.textContent = !st.enabled ? '已关闭：行级歌词不再做逐字对齐'
+        : st.modelReady ? `就绪：${st.engine}（无逐字时间戳的歌曲自动后台对齐）`
+        : st.downloading ? '模型下载中…'
+        : '模型未下载：点击下方按钮下载（约 243MB，仅首次需要）';
+    }
+  };
+  alignToggle?.addEventListener('click', async () => {
+    const st = await window.api.alignStatus?.();
+    const next = !(st?.enabled !== false);
+    window.api.setSetting('alignEnabled', next);
+    app.settings.alignEnabled = next;
+    refreshAlign();
+  });
+  $('#btnAlignModel')?.addEventListener('click', async () => {
+    const r = await window.api.alignModelDownload?.().catch(() => null);
+    if (r?.ready) { toast('模型已就绪'); refreshAlign(); return; }
+    if (!r?.ok) { toast('模型下载启动失败'); return; }
+    if (alignProg) alignProg.style.display = '';
+    toast('模型下载中，完成后自动就绪');
+  });
+  window.api.onAlignModelProgress?.((d) => {
+    if (d.error) { if (alignProg) { alignProg.textContent = '下载失败：' + d.error; } return; }
+    if (d.done) { if (alignProg) { alignProg.textContent = ''; alignProg.style.display = 'none'; } toast('识别模型已就绪'); refreshAlign(); return; }
+    if (alignProg) {
+      alignProg.style.display = '';
+      alignProg.textContent = `下载 ${d.file}：${(d.received / 1048576).toFixed(0)}MB${d.total ? ' / ' + (d.total / 1048576).toFixed(0) + 'MB' : ''}`;
+    }
+  });
+  $('#btnAlignCacheClear')?.addEventListener('click', async () => {
+    await window.api.alignCacheClear?.().catch(() => null);
+    toast('对齐缓存已清除');
+  });
+  refreshAlign();
+
   /* --- 播放页（大封面 + 歌词，汽水音乐式） --- */
   els.btnNp.addEventListener('click', () => app.toggleNp());
 
@@ -1768,6 +1813,15 @@ export function setupUI(app) {
       if (d.token && qrToken && d.token !== qrToken) return; // 旧会话迟到事件
       if (d.type === 'refresh' && d.qrSrc) { paintQr(d.qrSrc); showQrStatus('等待扫码…'); return; }
       if (d.type === 'scanned') { showQrStatus('已扫描，请在手机上确认登录'); return; }
+      if (d.type === 'pollState') { // 轮询非预期状态/网络异常：透明上屏（替代静默吞掉）
+        showQrStatus(d.text || '正在等待登录结果…');
+        return;
+      }
+      if (d.type === 'webfallback') { // 弹窗取码失败：官方网页窗口已亮出，退回窗口内登录
+        showQrStatus('已打开 QQ音乐官方登录窗口，请在窗口内完成登录');
+        qrRefresh?.classList.remove('hidden');
+        return;
+      }
       if (d.type === 'expired') { // 会话已被主进程关闭；保留 curPlat 供「刷新二维码」重新发起
         showQrStatus('二维码已过期，请刷新后重试', true);
         qrRefresh?.classList.remove('hidden');
@@ -1783,8 +1837,7 @@ export function setupUI(app) {
       const nm = (curPlat && curPlat.id === info.platform) ? curPlat.name : (info.name || info.platform);
       // 浮窗可能已被收起：登录成功必须照常收尾（弹提示、回显登录态、拉云歌单、刷首页）
       if (curPlat && curPlat.id === info.platform) { curPlat = null; showPlatView(); }
-      const nick = info.profile?.nickname;
-      toast(`「${nm}」登录成功${nick ? `：${nick}` : ''}，VIP 歌曲已解锁`);
+      toast(`「${nm}」登录成功，VIP 歌曲已解锁`); // 不显示昵称（用户要求）
       // 确定性事件：Cookie 落库成功后立即拉账号云歌单 + 刷新首页（登录态解锁更多曲目）
       app.refreshAccountPls?.(sid ? [sid] : undefined);
       app.reloadFeed?.();
@@ -1848,7 +1901,7 @@ export function setupUI(app) {
         nm.textContent = s.name;
         const st = document.createElement('span');
         st.textContent = off ? '暂不可用'
-          : (s.loggedIn ? `已登录${prof?.nickname ? ` · ${prof.nickname}` : ''}` : '未登录');
+          : (s.loggedIn ? '已登录' : '未登录'); // 不显示昵称（用户要求）
         btn.append(nm, st);
         btn.addEventListener('click', () => {
           if (off) { toast(s.hint || `「${s.name}」暂不支持扫码登录`, 4600); return; }
@@ -2012,8 +2065,8 @@ export function setupUI(app) {
 
   /* --- 每帧：进度 & 歌词 --- */
   // 舞台歌词：侧边竖排堆叠悬浮列（播放页/首页/PV与反应堆场景时隐藏）
-  // 结构：#stageLyric（贴边定位）> #stageLyricTilt（倾斜+上下渐隐 mask）> #stageLyricStack（JS 驱动 translateY 上滚）
-  const slBox = $('#stageLyric'), slTilt = $('#stageLyricTilt'), slStack = $('#stageLyricStack'), slPh = $('#stageLyricPh');
+  // 结构：#stageLyric（贴边定位）> #stageLyricClip（overflow 硬裁窗口 + 位置偏移）> #stageLyricTilt（3D 倾斜 + 贴边渐隐 mask）> #stageLyricStack（JS 驱动 translateY 上滚）
+  const slBox = $('#stageLyric'), slClip = $('#stageLyricClip'), slTilt = $('#stageLyricTilt'), slStack = $('#stageLyricStack'), slPh = $('#stageLyricPh');
   let slLineEls = [];      // 行 div 缓存（与 app.lyrics.lines 一一对应）
   let slOffsets = [0];     // 每行顶部累计偏移（px），实测行高累加（带翻译的行更高）
   let slTextMetrics = [];  // 每行卡拉OK填充素材 { l: 文字左起, w: 文字宽, cw: 容器宽 }（布局单位）
@@ -2078,6 +2131,12 @@ export function setupUI(app) {
         ? { l, w, cw }
         : null);
     }
+    // 可视窗口高 = 设置行数 × 实测平均行距，覆写 CSS 兜底值：CSS 只能按系数估行距，
+    // 估不准窗口里就会多塞进一行（行数设 11 实际看见 12+ 行）；实测值把翻译行加高也一并算准
+    if (slLineEls.length) {
+      const rows = Math.max(3, Math.min(15, Math.round(Number(app.settings.slRows) || 5)));
+      slClip.style.height = (rows * y / slLineEls.length).toFixed(1) + 'px';
+    }
   }
 
   /* 滚动定位：当前行中心恒贴容器中线 —— 滚动层自身 top:50% 已提供半高偏移，
@@ -2121,20 +2180,9 @@ export function setupUI(app) {
     if (karaokeOn && idx >= 0 && slLineEls[idx]) {
       const line = app.lyrics.lines[idx];
       const chars = line?.chars || [];
-      const lt = ltNow;
-      let litN = 0;
-      if (line?.words) {
-        for (let i = 0; i < chars.length; i++) {
-          const c = chars[i];
-          if (lt >= c.end) litN = i + 1;
-          else if (lt >= c.t) { litN = i + (lt - c.t) / Math.max(0.05, c.end - c.t); break; }
-          else break;
-        }
-      } else if (chars.length) {
-        const T = line.time, E = Math.max(line.time + 0.3, line.end);
-        const frac = E > T ? Math.min(1, Math.max(0, (lt - T) / (E - T))) : 1;
-        litN = frac * chars.length;
-      }
+      // 统一走 lyricKaraState：字级严格按真实时间戳（字间空洞扫光停住）；
+      // 行级 LRC 用演唱段窗口（不含行间等待）—— 与歌词面板/场景大字同一算法
+      const litN = lyricKaraState(line, ltNow).litChars;
       // 逐字浇光边界（px）：按文字自身起止（布局空间实测）裁剪 .sl-fill —— 亮区永远压在字形内
       const el = slLineEls[idx];
       const mt = slTextMetrics[idx];
@@ -3661,7 +3709,10 @@ export function setupUI(app) {
     els.albumBg.style.filter = f;
     els.albumBg.style.opacity = '';
     const ub = document.getElementById('userBg');
-    if (ub) ub.style.filter = f;
+    /* 手机端不挂 filter：用户自定义图片背景必须「能完全看清」——blur(90px)/
+       brightness(0.42) 是桌面氛围光晕（albumBg）的参数，糊化图片背景后
+       「背景清晰度」滑块怎么调都看不清（历史上「看不到背景」的根因） */
+    if (ub && !document.documentElement.classList.contains('rv-android')) ub.style.filter = f;
     app.settings.bgBlur = blur; app.settings.bgBright = bright;
     window.api.setSetting('bgBlur', blur);
     window.api.setSetting('bgBright', bright);

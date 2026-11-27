@@ -21,9 +21,9 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 /**
  * 通知栏媒体控制器 JS 桥：
  *   start()                 首次播放时启动前台服务（并申请通知权限）
- *   update({title,artist,playing,position,duration,artB64})  曲目/状态同步
+ *   update({title,artist,album,playing,fav,position,duration,artB64})  曲目/状态同步
  *   stop()                  队列清空时撤销通知
- * 事件：addListener('action', ({action:'play|pause|next|prev'}))
+ * 事件：addListener('action', ({action:'play|pause|next|prev|fav'}))
  */
 @CapacitorPlugin(name = "MediaNotif")
 public class MediaNotifPlugin extends Plugin {
@@ -60,15 +60,17 @@ public class MediaNotifPlugin extends Plugin {
         MusicService.State s = new MusicService.State();
         s.title = call.getString("title", "律动 RhythmViz");
         s.artist = call.getString("artist", "");
+        s.album = call.getString("album", "");
         Boolean playing = call.getBoolean("playing", false);
         s.playing = Boolean.TRUE.equals(playing);
+        s.fav = Boolean.TRUE.equals(call.getBoolean("fav", false));
         try { s.posMs = call.getData().optLong("position", 0L); } catch (Throwable ignored) { }
         try { s.durMs = call.getData().optLong("duration", 0L); } catch (Throwable ignored) { }
         String b64 = call.getString("artB64", null);
         if (b64 != null && !b64.isEmpty()) {
             try {
                 byte[] bytes = Base64.decode(b64, Base64.DEFAULT);
-                s.art = decodeScaled(bytes, 512);
+                s.art = decodeScaled(bytes, 768);
             } catch (Throwable t) {
                 Log.w(TAG, "封面解码失败: " + t.getMessage());
             }
